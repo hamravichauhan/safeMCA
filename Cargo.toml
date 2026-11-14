@@ -1,8 +1,8 @@
 [package]
-name = "mcp-guard"
+name = "safemca"
 version = "0.1.0"
 edition = "2021"
-authors = ["MCP-Guard Team"]
+authors = ["safeMCA Team"]
 description = "The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)"
 license = "MIT"
 
@@ -21,9 +21,9 @@ anyhow = "1.0"
 async-trait = "0.1"
 
 [[bin]]
-name = "mcp-guard"
+name = "safemca"
 path = "src/main.rs"
 
 [[bin]]
-name = "safemca"
-path = "src/main.rs"
+name = "mcp-guard"
+path = "src/bin/mcp-guard.rs"

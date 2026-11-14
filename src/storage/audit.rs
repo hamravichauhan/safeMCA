@@ -40,6 +40,9 @@ impl AuditLogger {
         };
 
         if let Ok(line) = serde_json::to_string(&entry) {
+            if let Some(parent) = self.log_path.parent() {
+                let _ = create_dir_all(parent);
+            }
             if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.log_path) {
                 let _ = writeln!(file, "{}", line);
             }

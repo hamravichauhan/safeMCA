@@ -80,8 +80,8 @@ fn wrap_config(path: &Path) -> Result<()> {
     for (server_name, server_val) in mcp_servers.iter_mut() {
         if let Some(server_obj) = server_val.as_object_mut() {
             let current_cmd = server_obj.get("command").and_then(|c| c.as_str()).unwrap_or("");
-            if current_cmd == "mcp-guard" {
-                println!("  • Server '{}' is already wrapped by mcp-guard", server_name.cyan());
+            if current_cmd == "mcp-guard" || current_cmd == "safemca" || current_cmd.ends_with("/mcp-guard") || current_cmd.ends_with("/safemca") {
+                println!("  • Server '{}' is already wrapped", server_name.cyan());
                 continue;
             }
 

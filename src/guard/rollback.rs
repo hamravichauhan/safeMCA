@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -15,6 +16,10 @@ impl RollbackEngine {
         Self::state_dir().join("last_snapshot_sha")
     }
 
+    fn untracked_file() -> PathBuf {
+        Self::state_dir().join("baseline_untracked.txt")
+    }
+
     pub fn take_snapshot() -> Result<Option<String>> {
         // Verify we are inside a git repository
         let is_git = Command::new("git")
@@ -25,6 +30,16 @@ impl RollbackEngine {
             return Ok(None);
         }
 
+        let _ = fs::create_dir_all(Self::state_dir());
+
+        // Record baseline untracked files
+        if let Ok(untracked_out) = Command::new("git")
+            .args(["ls-files", "--others", "--exclude-standard"])
+            .output()
+        {
+            let _ = fs::write(Self::untracked_file(), &untracked_out.stdout);
+        }
+
         // git stash create creates a commit object of current working tree without modifying index
         let output = Command::new("git")
             .args(["stash", "create"])
@@ -33,7 +48,6 @@ impl RollbackEngine {
 
         let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if !sha.is_empty() {
-            let _ = fs::create_dir_all(Self::state_dir());
             let _ = fs::write(Self::snapshot_file(), &sha);
             return Ok(Some(sha));
         }
@@ -46,7 +60,6 @@ impl RollbackEngine {
         if let Ok(head_out) = head_output {
             let head_sha = String::from_utf8_lossy(&head_out.stdout).trim().to_string();
             if !head_sha.is_empty() {
-                let _ = fs::create_dir_all(Self::state_dir());
                 let _ = fs::write(Self::snapshot_file(), &head_sha);
                 return Ok(Some(head_sha));
             }
@@ -70,40 +83,57 @@ impl RollbackEngine {
 
         println!("{} Restoring workspace to snapshot {}...", "⏪".cyan(), sha.yellow());
 
-        // Restore working tree from snapshot commit
+        // 1. Restore tracked working tree from snapshot commit
         let status = Command::new("git")
             .args(["restore", "--source", &sha, "--staged", "--worktree", "."])
             .status();
 
-        match status {
-            Ok(s) if s.success() => {
-                println!(
-                    "{} {}",
-                    "✓".bold().green(),
-                    "Successfully rolled back all file changes made by the AI agent!".bold().green()
-                );
-                let _ = fs::remove_file(snap_file);
-            }
+        let restored_tracked = match status {
+            Ok(s) if s.success() => true,
             _ => {
                 // Fallback for older git versions
-                let fallback = Command::new("git")
+                Command::new("git")
                     .args(["checkout", &sha, "--", "."])
-                    .status();
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            }
+        };
 
-                if let Ok(fb) = fallback {
-                    if fb.success() {
-                        println!(
-                            "{} {}",
-                            "✓".bold().green(),
-                            "Successfully rolled back file changes via checkout fallback!".bold().green()
-                        );
-                        let _ = fs::remove_file(snap_file);
-                        return Ok(());
+        // 2. Remove any rogue untracked files created by the agent
+        let untracked_record = Self::untracked_file();
+        if untracked_record.exists() {
+            let baseline_content = fs::read_to_string(&untracked_record).unwrap_or_default();
+            let baseline_files: HashSet<String> = baseline_content
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+
+            if let Ok(current_out) = Command::new("git")
+                .args(["ls-files", "--others", "--exclude-standard"])
+                .output()
+            {
+                let current_content = String::from_utf8_lossy(&current_out.stdout);
+                for current_file in current_content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                    if !baseline_files.contains(current_file) {
+                        println!("  {} Removed rogue file created by agent: {}", "🗑️".yellow(), current_file.red());
+                        let _ = fs::remove_file(current_file);
                     }
                 }
-
-                eprintln!("{}", "Failed to restore git snapshot.".red());
             }
+            let _ = fs::remove_file(untracked_record);
+        }
+
+        if restored_tracked {
+            println!(
+                "{} {}",
+                "✓".bold().green(),
+                "Successfully rolled back all file changes made by the AI agent!".bold().green()
+            );
+            let _ = fs::remove_file(snap_file);
+        } else {
+            eprintln!("{}", "Failed to restore git snapshot.".red());
         }
 
         Ok(())

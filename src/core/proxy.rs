@@ -20,16 +20,25 @@ impl StdioProxy {
     }
 
     pub async fn run(&self, command: &str, args: &[String]) -> Result<()> {
-        let mut child = Command::new(command)
-            .args(args)
+        let mut cmd = Command::new(command);
+        cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
+            .kill_on_drop(true); // Ensure child process does not become an orphan if proxy drops
+
+        let mut child = cmd
             .spawn()
             .with_context(|| format!("Failed to spawn child MCP server: '{}'", command))?;
 
-        let mut child_stdin = child.stdin.take().expect("Failed to open child stdin");
-        let child_stdout = child.stdout.take().expect("Failed to open child stdout");
+        let mut child_stdin = child
+            .stdin
+            .take()
+            .context("Failed to open child stdin pipe")?;
+        let child_stdout = child
+            .stdout
+            .take()
+            .context("Failed to open child stdout pipe")?;
 
         let mut client_stdin_reader = BufReader::new(tokio::io::stdin()).lines();
         let mut client_stdout = tokio::io::stdout();
@@ -58,13 +67,18 @@ impl StdioProxy {
                             PolicyDecision::Block { reason } => {
                                 audit.log(&server_name, &tool_name, &arguments, "BLOCKED", Some(&reason));
 
-                                let err_resp = ParsedMessage::make_error_response(
-                                    &id,
-                                    -32000,
-                                    &format!("Blocked by MCP-Guard: {}", reason),
-                                );
-                                let _ = client_stdout.write_all(err_resp.as_bytes()).await;
-                                let _ = client_stdout.flush().await;
+                                // Only reply if this was a request with an id (JSON-RPC spec: do not reply to notifications)
+                                if !id.is_null() {
+                                    let err_resp = ParsedMessage::make_error_response(
+                                        &id,
+                                        -32000,
+                                        &format!("Blocked by MCP-Guard: {}", reason),
+                                    );
+                                    if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
+                                        break;
+                                    }
+                                    let _ = client_stdout.flush().await;
+                                }
                             }
 
                             PolicyDecision::RequireApproval { reason } => {
@@ -76,18 +90,24 @@ impl StdioProxy {
 
                                     let mut line_nl = line;
                                     line_nl.push('\n');
-                                    let _ = child_stdin.write_all(line_nl.as_bytes()).await;
+                                    if child_stdin.write_all(line_nl.as_bytes()).await.is_err() {
+                                        break;
+                                    }
                                     let _ = child_stdin.flush().await;
                                 } else {
                                     audit.log(&server_name, &tool_name, &arguments, "USER_DENIED", Some(&reason));
 
-                                    let err_resp = ParsedMessage::make_error_response(
-                                        &id,
-                                        -32000,
-                                        "Blocked by MCP-Guard: Denied by user.",
-                                    );
-                                    let _ = client_stdout.write_all(err_resp.as_bytes()).await;
-                                    let _ = client_stdout.flush().await;
+                                    if !id.is_null() {
+                                        let err_resp = ParsedMessage::make_error_response(
+                                            &id,
+                                            -32000,
+                                            "Blocked by MCP-Guard: Denied by user.",
+                                        );
+                                        if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
+                                            break;
+                                        }
+                                        let _ = client_stdout.flush().await;
+                                    }
                                 }
                             }
 
@@ -96,7 +116,9 @@ impl StdioProxy {
 
                                 let mut line_nl = line;
                                 line_nl.push('\n');
-                                let _ = child_stdin.write_all(line_nl.as_bytes()).await;
+                                if child_stdin.write_all(line_nl.as_bytes()).await.is_err() {
+                                    break;
+                                }
                                 let _ = child_stdin.flush().await;
                             }
                         }
@@ -106,7 +128,9 @@ impl StdioProxy {
                         // Non-tool messages (e.g. initialize, list_tools, responses) stream through
                         let mut line_nl = line;
                         line_nl.push('\n');
-                        let _ = child_stdin.write_all(line_nl.as_bytes()).await;
+                        if child_stdin.write_all(line_nl.as_bytes()).await.is_err() {
+                            break;
+                        }
                         let _ = child_stdin.flush().await;
                     }
                 }
@@ -119,7 +143,9 @@ impl StdioProxy {
             while let Ok(Some(line)) = server_stdout_reader.next_line().await {
                 let mut line_nl = line;
                 line_nl.push('\n');
-                let _ = out.write_all(line_nl.as_bytes()).await;
+                if out.write_all(line_nl.as_bytes()).await.is_err() {
+                    break;
+                }
                 let _ = out.flush().await;
             }
         };
