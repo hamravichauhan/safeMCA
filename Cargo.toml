@@ -1,6 +1,6 @@
 [package]
 name = "safemca"
-version = "0.1.1"
+version = "0.2.0"
 default-run = "safemca"
 edition = "2021"
 authors = ["Ravi Chauhan <hamravichauhan@gmail.com>"]

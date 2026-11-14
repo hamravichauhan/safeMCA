@@ -2,9 +2,12 @@ use crate::core::protocol::ParsedMessage;
 use crate::guard::circuit_breaker::CircuitBreaker;
 use crate::guard::config::ProjectConfig;
 use crate::guard::hitl::HitlPrompter;
-use crate::guard::policy::{GuardPolicy, PolicyDecision};
+use crate::guard::policy::{GuardPolicy, PolicyDecision, ResponseDecision};
 use crate::guard::rollback::RollbackEngine;
+use crate::guard::tool_router::ToolRouter;
 use crate::storage::audit::AuditLogger;
+use crate::storage::cache::ResponseCache;
+use crate::storage::vault::SecretVault;
 use anyhow::{Context, Result};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -22,8 +25,14 @@ impl StdioProxy {
     }
 
     pub async fn run(&self, command: &str, args: &[String]) -> Result<()> {
+        // Resolve any vault templates in arguments
+        let resolved_args: Vec<String> = args
+            .iter()
+            .map(|a| SecretVault::resolve_template(a).unwrap_or_else(|_| a.clone()))
+            .collect();
+
         let mut cmd = Command::new(command);
-        cmd.args(args)
+        cmd.args(&resolved_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -49,8 +58,13 @@ impl StdioProxy {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let project_config = ProjectConfig::load_or_default(&current_dir);
         let mut circuit_breaker = CircuitBreaker::new(project_config.circuit_breaker.as_ref());
-        let policy = GuardPolicy::with_config(project_config);
+        let policy = GuardPolicy::with_config(project_config.clone());
+        let policy_server = policy.clone();
+        let tool_router = ToolRouter::new(project_config.clone());
+        let response_cache = ResponseCache::new();
         let audit = AuditLogger::new(&server_name);
+        let audit_server = audit.clone();
+        let server_name_out = server_name.clone();
 
         // Loop 1: Client -> Server (Interception & Guard)
         let client_to_server = async move {
@@ -157,14 +171,9 @@ impl StdioProxy {
                         // Inspect all messages in the batch
                         let mut blocked_reason = None;
                         let mut require_approval_item = None;
-                        let mut first_id = None;
 
                         for item in &items {
                             if let ParsedMessage::ToolCall { id, tool_name, arguments, .. } = item {
-                                if first_id.is_none() {
-                                    first_id = Some(id.clone());
-                                }
-
                                 // Circuit breaker check on batch item
                                 if let Err(trip) = circuit_breaker.check_and_record(tool_name, arguments) {
                                     blocked_reason = Some((id.clone(), tool_name.clone(), arguments.clone(), trip.message()));
@@ -245,16 +254,152 @@ impl StdioProxy {
             }
         };
 
-        // Loop 2: Server -> Client (Response forwarding)
+        // Loop 2: Server -> Client (Response sanitization, minification, airbag, and forwarding)
         let server_to_client = async move {
             let mut out = tokio::io::stdout();
             while let Ok(Some(line)) = server_stdout_reader.next_line().await {
-                let mut line_nl = line;
-                line_nl.push('\n');
-                if out.write_all(line_nl.as_bytes()).await.is_err() {
-                    break;
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
                 }
-                let _ = out.flush().await;
+
+                // 1. Stdio Stream Sanitizer: Protect against non-JSON stdout ("console.log()" / "print()" trap)
+                let parsed_val: serde_json::Value = match serde_json::from_str(trimmed) {
+                    Ok(val) => val,
+                    Err(_) => {
+                        // Non-JSON stdout detected from child process!
+                        // Divert to stderr so client's JSON-RPC pipe does NOT crash.
+                        let mut err_out = tokio::io::stderr();
+                        let warning = format!(
+                            "[safeMCA Sanitizer] Non-JSON stdout from child '{}' diverted to stderr to prevent connection crash: {}\n",
+                            server_name_out, trimmed
+                        );
+                        let _ = err_out.write_all(warning.as_bytes()).await;
+                        let _ = err_out.flush().await;
+                        continue; // Do NOT forward malformed non-JSON lines to client stdout
+                    }
+                };
+
+                // 2. Schema Minifier & Dynamic Tool Router (tools/list response)
+                if ToolRouter::is_tools_list_response(&parsed_val) {
+                    let (minified_val, orig_size, new_size) = tool_router.process_tools_list_response(parsed_val);
+                    if orig_size > new_size {
+                        let saved = orig_size - new_size;
+                        audit_server.log(
+                            &server_name_out,
+                            "tools/list",
+                            &serde_json::json!({
+                                "original_bytes": orig_size,
+                                "minified_bytes": new_size,
+                                "saved_bytes": saved
+                            }),
+                            "SCHEMA_MINIFIED",
+                            Some(&format!("Minified tool schema by {} bytes (~{} tokens saved)", saved, saved / 4)),
+                        );
+                    }
+                    let minified_str = minified_val.to_string();
+                    let mut out_bytes = minified_str.into_bytes();
+                    out_bytes.push(b'\n');
+                    if out.write_all(&out_bytes).await.is_err() {
+                        break;
+                    }
+                    let _ = out.flush().await;
+                    continue;
+                }
+
+                // 3. Response Airbag & Bidirectional Response Guard (tools/call response)
+                let mut forwarded_val = parsed_val;
+                let mut should_forward = true;
+                let msg_id = forwarded_val.get("id").cloned().unwrap_or(serde_json::Value::Null);
+
+                if let Some(result) = forwarded_val.get_mut("result") {
+                    let raw_result_str = result.to_string();
+
+                    // 3.1 Bidirectional Response Guard: Indirect Prompt Injection & Exfiltration Check
+                    match policy_server.evaluate_response(&server_name_out, &raw_result_str) {
+                        ResponseDecision::Block { reason } => {
+                            audit_server.log(
+                                &server_name_out,
+                                "tools/call_response",
+                                &serde_json::json!({
+                                    "preview": crate::guard::safe_truncate(&raw_result_str, 120)
+                                }),
+                                "INDIRECT_PROMPT_INJECTION_BLOCKED",
+                                Some(&reason),
+                            );
+
+                            let err_resp = ParsedMessage::make_error_response(
+                                &msg_id,
+                                -32000,
+                                &format!("Blocked by safeMCA: {}", reason),
+                            );
+                            if out.write_all(err_resp.as_bytes()).await.is_err() {
+                                break;
+                            }
+                            let _ = out.flush().await;
+                            should_forward = false;
+                        }
+                        ResponseDecision::Allow => {}
+                    }
+
+                    // 3.2 Response Size Airbag & Local Cache
+                    if should_forward {
+                        let max_bytes = project_config.response_airbag
+                            .as_ref()
+                            .and_then(|a| a.max_bytes)
+                            .unwrap_or(32768); // 32KB default limit
+
+                        let max_preview_lines = project_config.response_airbag
+                            .as_ref()
+                            .and_then(|a| a.max_preview_lines)
+                            .unwrap_or(40);
+
+                        if raw_result_str.len() > max_bytes {
+                            if let Ok((hash, cache_path, summary)) = response_cache.store_and_summarize(
+                                &server_name_out,
+                                &raw_result_str,
+                                max_preview_lines,
+                            ) {
+                                audit_server.log(
+                                    &server_name_out,
+                                    "tools/call_response",
+                                    &serde_json::json!({
+                                        "original_size": raw_result_str.len(),
+                                        "cached_file": cache_path.to_string_lossy(),
+                                        "hash": hash
+                                    }),
+                                    "AIRBAG_TRUNCATED",
+                                    Some(&format!(
+                                        "Truncated oversized output ({} bytes) to protect LLM context",
+                                        raw_result_str.len()
+                                    )),
+                                );
+
+                                // Replace result with clean preview and cache reference
+                                *result = serde_json::json!({
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": summary
+                                        }
+                                    ],
+                                    "isError": false,
+                                    "_safemca_cached": true,
+                                    "_safemca_cache_file": cache_path.to_string_lossy()
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if should_forward {
+                    let mut out_str = forwarded_val.to_string();
+                    out_str.push('\n');
+                    if out.write_all(out_str.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    let _ = out.flush().await;
+                }
             }
         };
 

@@ -69,11 +69,7 @@ pub fn execute(limit: usize, verify: bool) -> Result<()> {
         };
 
         let reason = entry.reason.unwrap_or_else(|| "-".to_string());
-        let truncated_reason = if reason.len() > 30 {
-            format!("{}...", &reason[..27])
-        } else {
-            reason
-        };
+        let truncated_reason = crate::guard::safe_truncate(&reason, 30);
 
         println!(
             "{:<20} {:<15} {:<20} {:<25} {}",

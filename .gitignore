@@ -4,3 +4,4 @@ Cargo.lock
 .mcp-guard
 *.backup
 .DS_Store
+.safemca

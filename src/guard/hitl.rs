@@ -50,11 +50,7 @@ impl HitlPrompter {
         arguments: &Value,
     ) -> bool {
         let args_pretty = serde_json::to_string_pretty(arguments).unwrap_or_else(|_| arguments.to_string());
-        let truncated_args = if args_pretty.len() > 300 {
-            format!("{}...", &args_pretty[..300])
-        } else {
-            args_pretty
-        };
+        let truncated_args = crate::guard::safe_truncate(&args_pretty, 300);
 
         let banner = format!(
             "\n{}\n{} {}\n{}   {}\n{} {}\n{}  {}\n{}\n{} [y/N]: ",
@@ -95,11 +91,7 @@ impl HitlPrompter {
     #[cfg(target_os = "macos")]
     fn prompt_macos_dialog(server: &str, tool: &str, reason: &str, arguments: &Value) -> bool {
         let args_str = serde_json::to_string(arguments).unwrap_or_else(|_| "".to_string());
-        let preview = if args_str.len() > 120 {
-            format!("{}...", &args_str[..120])
-        } else {
-            args_str
-        };
+        let preview = crate::guard::safe_truncate(&args_str, 120);
 
         let safe_server = Self::escape_applescript(server);
         let safe_tool = Self::escape_applescript(tool);
@@ -124,11 +116,7 @@ impl HitlPrompter {
     #[cfg(target_os = "windows")]
     fn prompt_windows_dialog(server: &str, tool: &str, reason: &str, arguments: &Value) -> bool {
         let args_str = serde_json::to_string(arguments).unwrap_or_else(|_| "".to_string());
-        let preview = if args_str.len() > 120 {
-            format!("{}...", &args_str[..120])
-        } else {
-            args_str
-        };
+        let preview = crate::guard::safe_truncate(&args_str, 120);
 
         let message = format!(
             "safeMCA Alert`n`nServer: {}`nTool: {}`nReason: {}`n`nArguments:`n{}`n`nDo you want to allow this action?",

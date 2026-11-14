@@ -19,11 +19,16 @@ Without safeMCA, AI models have **unrestricted "God-Mode" access** to execute co
 safeMCA provides:
 1. **The Airbag (Human-in-the-Loop):** Prompts you before destructive actions run (e.g. `DROP TABLE`, `rm -rf`, file deletions).
 2. **Deterministic Sandboxing:** Physically blocks AI agents from touching `~/.ssh`, `~/.aws`, `.env`, or escaping your project directory.
-3. **Runaway Agent Circuit Breaker:** Stops infinite loops and rate limit runaway (3 identical calls or >30 calls/min).
-4. **Project-Level Policies (`.safemca.yml`):** Commit security policies into git to enforce team-wide path, shell, and SQL boundaries.
-5. **1-Click Rollback:** Automatically captures shadow snapshots so you can undo agent-made file changes with `safemca undo`.
-6. **10-Second Auto-Wrap:** Automatically finds and wraps your Claude Desktop or Cursor configuration with one command.
-7. **Tamper-Proof Audit Trail:** High-speed append-only logs of every tool call and blocked attack with automated secret redaction.
+3. **Bidirectional Response Guard:** Intercepts indirect prompt injections, hidden unicode obfuscations, and exfiltration beacons in tool outputs.
+4. **Response Size Airbag:** Automatically truncates and caches oversized outputs (32KB+) to `.safemca/cache/` to prevent LLM context exhaustion.
+5. **Stdio Stream Sanitizer:** Catches stray `console.log()` or `print()` outputs from child servers, diverting them to stderr to prevent silent JSON-RPC connection crashes.
+6. **Schema Minifier & Tool Router:** Compresses `tools/list` JSON schemas by 40-60% to eliminate the 50,000 token tax on every prompt.
+7. **Zero-Plaintext Secret Vault:** Replaces hardcoded keys in config files with `{{safemca:keychain/...}}` OS keychain integration.
+8. **Runaway Agent Circuit Breaker:** Stops infinite loops and rate limit runaway (3 identical calls or >30 calls/min).
+9. **Project-Level Policies (`.safemca.yml`):** Commit security policies into git to enforce team-wide path, shell, and SQL boundaries.
+10. **1-Click Rollback:** Automatically captures shadow snapshots so you can undo agent-made file changes with `safemca undo`.
+11. **Live Runtime Inspector (`safemca top`):** Real-time terminal dashboard tracking active servers, token savings, latency, and threats.
+12. **Tamper-Evident Hash-Chained Audit Trail:** Cryptographic SHA-256 ledger with automated salted credential redaction and `safemca audit --verify`.
 
 ---
 
@@ -177,10 +182,12 @@ safeMCA includes a built-in circuit breaker:
 | `safemca wrap` | Automatically wraps Claude Desktop / Cursor servers |
 | `safemca unwrap` | Restores original unwrapped configuration |
 | `safemca run --server <name> -- <cmd> [args]` | Runs a target MCP server through the security proxy |
+| `safemca top` | Live terminal inspector displaying telemetry and token savings |
 | `safemca snapshot` | Captures baseline workspace state before running agents |
 | `safemca undo` | Reverts all file changes and purges rogue files/dirs created by agents |
 | `safemca audit [--tail 20]` | Displays recent security audit logs (with redacted credentials) |
-| `safemca test` | Runs self-check verifying that all attacks are blocked |
+| `safemca audit --verify` | Cryptographically verifies SHA-256 hash-chain integrity of audit ledger |
+| `safemca test` | Runs self-check verifying that all attacks and injections are blocked |
 
 ---
 

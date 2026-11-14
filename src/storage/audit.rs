@@ -22,6 +22,7 @@ pub struct AuditEntry {
     pub hash: String,
 }
 
+#[derive(Clone, Debug)]
 pub struct AuditLogger {
     log_path: PathBuf,
 }

@@ -17,6 +17,12 @@ pub struct ProjectConfig {
     pub shell_policy: Option<ShellPolicyConfig>,
     #[serde(default)]
     pub circuit_breaker: Option<CircuitBreakerConfig>,
+    #[serde(default)]
+    pub response_airbag: Option<ResponseAirbagConfig>,
+    #[serde(default)]
+    pub response_guard: Option<ResponseGuardConfig>,
+    #[serde(default)]
+    pub tool_router: Option<ToolRouterConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -40,6 +46,27 @@ pub struct ShellPolicyConfig {
 pub struct CircuitBreakerConfig {
     pub max_calls_per_minute: Option<usize>,
     pub max_identical_consecutive_calls: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResponseAirbagConfig {
+    pub max_bytes: Option<usize>,
+    pub max_preview_lines: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResponseGuardConfig {
+    pub scan_indirect_injection: Option<bool>,
+    pub block_unicode_obfuscation: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolRouterConfig {
+    pub minify_schemas: Option<bool>,
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+    #[serde(default)]
+    pub excluded_tools: Vec<String>,
 }
 
 impl ProjectConfig {

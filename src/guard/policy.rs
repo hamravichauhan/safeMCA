@@ -9,6 +9,13 @@ pub enum PolicyDecision {
     Block { reason: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResponseDecision {
+    Allow,
+    Block { reason: String },
+}
+
+#[derive(Clone)]
 pub struct GuardPolicy {
     project_config: ProjectConfig,
     sensitive_path_regex: Regex,
@@ -20,6 +27,10 @@ pub struct GuardPolicy {
     sql_comment_block_regex: Regex,
     sql_comment_line_regex: Regex,
     sql_mysql_comment_regex: Regex,
+    // Response inspection regexes
+    indirect_injection_regex: Regex,
+    exfiltration_beacon_regex: Regex,
+    zero_width_unicode_regex: Regex,
 }
 
 impl Default for GuardPolicy {
@@ -71,7 +82,75 @@ impl GuardPolicy {
             sql_comment_block_regex: Regex::new(r#"/\*[\s\S]*?\*/"#).unwrap(),
             sql_comment_line_regex: Regex::new(r#"--[^\r\n]*"#).unwrap(),
             sql_mysql_comment_regex: Regex::new(r#"/\*![\s\S]*?\*/"#).unwrap(),
+
+            // Indirect prompt injection signatures in tool responses
+            indirect_injection_regex: Regex::new(
+                r#"(?i)\b(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|existing)\s+(instructions|prompts|rules|commands|constraints)\b|\b(system\s+prompt|system\s+override|system_instructions)\s*[:=]|<\|?(im_start|endoftext|system|user|assistant)\|?>|\bassistant\s*:\s*you\s+(are|must|will)\b"#
+            ).unwrap(),
+
+            // Suspicious exfiltration beacons inside tool outputs
+            exfiltration_beacon_regex: Regex::new(
+                r#"(?i)\b(curl|wget)\s+.*(attacker|webhook\.site|ngrok-free|pipedream|requestbin|\.oastify|\?exfil=)|echo\s+[A-Za-z0-9+/=]{20,}\s*\|\s*(ba|z)?sh"#
+            ).unwrap(),
+
+            // Zero-width unicode characters (\u200B - \u200D, \uFEFF, \u2060)
+            zero_width_unicode_regex: Regex::new(r#"[\u{200B}-\u{200D}\u{FEFF}\u{2060}]"#).unwrap(),
         }
+    }
+
+    /// Evaluates tool outputs before passing them back to the LLM client
+    pub fn evaluate_response(&self, tool_name: &str, raw_response_text: &str) -> ResponseDecision {
+        let scan_enabled = self.project_config.response_guard
+            .as_ref()
+            .and_then(|g| g.scan_indirect_injection)
+            .unwrap_or(true);
+
+        if !scan_enabled {
+            return ResponseDecision::Allow;
+        }
+
+        // 1. Scan for indirect prompt injection signatures
+        if let Some(mat) = self.indirect_injection_regex.find(raw_response_text) {
+            return ResponseDecision::Block {
+                reason: format!(
+                    "Indirect prompt injection attempt detected in output of tool '{}': matched pattern '{}'",
+                    tool_name,
+                    mat.as_str()
+                ),
+            };
+        }
+
+        // 2. Scan for exfiltration beacons
+        if let Some(mat) = self.exfiltration_beacon_regex.find(raw_response_text) {
+            return ResponseDecision::Block {
+                reason: format!(
+                    "Malicious exfiltration command detected in output of tool '{}': matched pattern '{}'",
+                    tool_name,
+                    mat.as_str()
+                ),
+            };
+        }
+
+        // 3. Scan for zero-width unicode obfuscations
+        let check_unicode = self.project_config.response_guard
+            .as_ref()
+            .and_then(|g| g.block_unicode_obfuscation)
+            .unwrap_or(true);
+
+        if check_unicode {
+            let zero_width_count = self.zero_width_unicode_regex.find_iter(raw_response_text).count();
+            if zero_width_count > 3 {
+                return ResponseDecision::Block {
+                    reason: format!(
+                        "Hidden zero-width unicode obfuscation detected in output of tool '{}' ({} invisible characters)",
+                        tool_name,
+                        zero_width_count
+                    ),
+                };
+            }
+        }
+
+        ResponseDecision::Allow
     }
 
     /// Recursively decodes percent-encoded sequences (handles single, double, and triple encoding)
@@ -105,28 +184,43 @@ impl GuardPolicy {
             result.push(bytes[i] as char);
             i += 1;
         }
-
         result
     }
 
-    /// Normalizes Unicode homoglyphs and trick characters that could be used to bypass regex filters
+    /// Normalizes Unicode homoglyphs and trick characters that could bypass path filters
     fn normalize_unicode_tricks(s: &str) -> String {
         s.replace(['／', '＼'], "/")
             .replace('‥', "..")
             .replace('．', ".")
-            .replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'], "") // Strip zero-width spaces
+            .replace(['\u{2215}', '\u{2044}'], "/")
+            .replace('\u{2025}', "..")
+            .replace('\u{FF0E}', ".")
     }
 
-    /// Strips comments, quotes, brackets, and collapses whitespace to normalize SQL queries against obfuscation
-    fn normalize_sql(&self, input: &str) -> String {
-        let no_mysql = self.sql_mysql_comment_regex.replace_all(input, " ");
-        let no_block = self.sql_comment_block_regex.replace_all(&no_mysql, " ");
-        let no_comments = self.sql_comment_line_regex.replace_all(&no_block, " ");
-        let no_quotes = no_comments.replace(['`', '[', ']', '"'], " ");
-        no_quotes.split_whitespace().collect::<Vec<_>>().join(" ")
+    /// Normalizes SQL statements by stripping block comments (/*...*/),
+    /// line comments (-- ...), MySQL conditional comments (/*!...*/),
+    /// and collapsing all consecutive whitespace.
+    fn normalize_sql(&self, sql: &str) -> String {
+        let no_mysql = self.sql_mysql_comment_regex.replace_all(sql, " ");
+        let no_blocks = self.sql_comment_block_regex.replace_all(&no_mysql, " ");
+        let no_lines = self.sql_comment_line_regex.replace_all(&no_blocks, " ");
+        
+        let mut clean = String::with_capacity(no_lines.len());
+        let mut prev_space = false;
+        for ch in no_lines.chars() {
+            if ch.is_whitespace() {
+                if !prev_space {
+                    clean.push(' ');
+                    prev_space = true;
+                }
+            } else {
+                clean.push(ch);
+                prev_space = false;
+            }
+        }
+        clean.trim().to_string()
     }
 
-    /// Recursively extracts all unescaped string values from the JSON argument tree
     fn extract_all_strings(val: &Value, list: &mut Vec<String>) {
         match val {
             Value::String(s) => list.push(s.clone()),
@@ -145,12 +239,16 @@ impl GuardPolicy {
         }
     }
 
+    /// Primary evaluation engine for incoming client tool calls
     pub fn evaluate(&self, tool_name: &str, arguments: &Value) -> PolicyDecision {
         let mut extracted_strings = Vec::new();
         Self::extract_all_strings(arguments, &mut extracted_strings);
 
         // Also check the stringified payload as fallback
         extracted_strings.push(arguments.to_string());
+
+        // Prepend tool_name so rules inspecting command names match
+        extracted_strings.insert(0, tool_name.to_string());
 
         for raw_text in &extracted_strings {
             // 0. Anti-Injection: Null byte detection
@@ -176,21 +274,21 @@ impl GuardPolicy {
             }
 
             // -------------------------------------------------------------
-            // Feature 1: Project-Level Policy Config (.safemca.yml) Checks
+            // 1. Project-level policy overrides (.safemca.yml)
             // -------------------------------------------------------------
 
             // 1.1 Custom Blocked Paths
-            for blocked in &self.project_config.blocked_paths {
-                let clean_blocked = blocked.trim().trim_end_matches("/*").trim_end_matches("/**");
-                if !clean_blocked.is_empty()
-                    && (text.contains(clean_blocked)
-                        || decoded.contains(clean_blocked)
-                        || normalized_decoded.contains(clean_blocked))
+            for blocked_glob in &self.project_config.blocked_paths {
+                let clean_glob = blocked_glob.trim().trim_end_matches("/*").trim_end_matches("/**");
+                if !clean_glob.is_empty()
+                    && (text.contains(clean_glob)
+                        || decoded.contains(clean_glob)
+                        || normalized_decoded.contains(clean_glob))
                 {
                     return PolicyDecision::Block {
                         reason: format!(
                             "Access to path blocked by project policy (.safemca.yml): '{}'",
-                            blocked
+                            blocked_glob
                         ),
                     };
                 }

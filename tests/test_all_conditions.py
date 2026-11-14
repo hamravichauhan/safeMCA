@@ -323,8 +323,99 @@ shell_policy:
 
     p_cb.terminate()
 
+    # ----------------------------------------------------------------------
+    # Condition 9: Stdio Stream Sanitizer ("console.log()" Trap)
+    # ----------------------------------------------------------------------
+    print("\n--- [Condition 9] Stdio Stream Sanitizer (console.log Trap Protection) ---")
+    p_san = subprocess.Popen(
+        ["./target/release/safemca", "run", "--server", "test-sanitizer", "--", "python3", "tests/mock_mcp_server.py"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    p_san.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize"}) + "\n")
+    p_san.stdin.flush()
+    p_san.stdout.readline()
+
+    # Trigger stray print inside child server
+    p_san.stdin.write(json.dumps({
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {"trigger_stray_print": True, "path": "src/lib.rs"}}
+    }) + "\n")
+    p_san.stdin.flush()
+
+    # safeMCA should catch the stray print, divert to stderr, and return the clean JSON-RPC response on stdout
+    san_resp_line = p_san.stdout.readline().strip()
+    san_resp = json.loads(san_resp_line)
+    assert san_resp.get("result", {}).get("content") is not None
+    print("[PASS] Stdio Stream Sanitizer: Stray child prints intercepted and diverted without breaking JSON-RPC pipe!")
+
+    # ----------------------------------------------------------------------
+    # Condition 10: Response Size Airbag & Local Cache (Oversized Payloads)
+    # ----------------------------------------------------------------------
+    print("\n--- [Condition 10] Response Size Airbag & Context Truncation Engine ---")
+    p_san.stdin.write(json.dumps({
+        "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {"trigger_giant_payload": True, "path": "large_dump.sql"}}
+    }) + "\n")
+    p_san.stdin.flush()
+
+    airbag_resp = json.loads(p_san.stdout.readline().strip())
+    airbag_content = airbag_resp.get("result", {}).get("content", [{}])[0].get("text", "")
+    assert "[safeMCA Airbag]" in airbag_content
+    assert "truncated" in airbag_content
+    assert airbag_resp.get("result", {}).get("_safemca_cached") is True
+    print(f"[PASS] Response Size Airbag: 50KB payload automatically truncated and cached to protect LLM context window!")
+
+    # ----------------------------------------------------------------------
+    # Condition 11: Bidirectional Response Guard (Indirect Prompt Injection)
+    # ----------------------------------------------------------------------
+    print("\n--- [Condition 11] Bidirectional Response Guard (Indirect Prompt Injection) ---")
+    p_san.stdin.write(json.dumps({
+        "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {"trigger_prompt_injection": True, "path": "untrusted_readme.md"}}
+    }) + "\n")
+    p_san.stdin.flush()
+
+    inject_resp = json.loads(p_san.stdout.readline().strip())
+    assert inject_resp.get("error", {}).get("code") == -32000
+    assert "Indirect prompt injection attempt detected" in inject_resp["error"]["message"]
+    print(f"[PASS] Bidirectional Response Guard: {inject_resp['error']['message']}")
+
+    # ----------------------------------------------------------------------
+    # Condition 12: Schema Minifier & Dynamic Tool Router (50k Token Reducer)
+    # ----------------------------------------------------------------------
+    print("\n--- [Condition 12] Schema Minifier & Dynamic Tool Router ---")
+    p_san.stdin.write(json.dumps({
+        "jsonrpc": "2.0", "id": 5, "method": "tools/list"
+    }) + "\n")
+    p_san.stdin.flush()
+
+    minified_tools_resp = json.loads(p_san.stdout.readline().strip())
+    tools_list = minified_tools_resp.get("result", {}).get("tools", [])
+    assert len(tools_list) == 3
+    # Check that $schema metadata was stripped by Schema Minifier
+    read_file_schema = next(t for t in tools_list if t["name"] == "read_file")["inputSchema"]
+    assert "$schema" not in read_file_schema
+    assert "title" not in read_file_schema
+    print("[PASS] Schema Minifier: Redundant schema metadata stripped, token size compressed!")
+
+    p_san.terminate()
+
+    # ----------------------------------------------------------------------
+    # Condition 13: Live Runtime Inspector Dashboard (`safemca top`)
+    # ----------------------------------------------------------------------
+    print("\n--- [Condition 13] Runtime Inspector & Telemetry Dashboard (`safemca top`) ---")
+    top_proc = subprocess.run(["./target/release/safemca", "top"], capture_output=True, text=True)
+    assert top_proc.returncode == 0
+    assert "safeMCA Live Runtime Inspector & Telemetry" in top_proc.stdout
+    assert "Active MCP Servers:" in top_proc.stdout
+    assert "Context & Token Optimization:" in top_proc.stdout
+    print("[PASS] Runtime Inspector Dashboard: Successfully computed and rendered telemetry metrics!")
+
     print("\n================================================================")
-    print("  ALL CONDITIONS VERIFIED AND PASSED!")
+    print("  ALL 13 CONDITIONS VERIFIED AND PASSED!")
     print("================================================================")
 
 if __name__ == "__main__":
