@@ -1,6 +1,7 @@
 [package]
 name = "safemca"
 version = "0.1.1"
+default-run = "safemca"
 edition = "2021"
 authors = ["Ravi Chauhan <hamravichauhan@gmail.com>"]
 description = "The sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)"
