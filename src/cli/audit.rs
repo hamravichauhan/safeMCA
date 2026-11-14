@@ -2,7 +2,38 @@ use crate::storage::audit::AuditLogger;
 use anyhow::Result;
 use colored::Colorize;
 
-pub fn execute(limit: usize) -> Result<()> {
+pub fn execute(limit: usize, verify: bool) -> Result<()> {
+    if verify {
+        println!("{}", "Verifying cryptographic SHA-256 hash-chain of audit ledger...".cyan());
+        match AuditLogger::verify_integrity()? {
+            (true, count) => {
+                println!(
+                    "{} {}",
+                    "[OK]".bold().green(),
+                    format!(
+                        "Cryptographic Ledger Verified: {} entries verified, hash-chain intact (Zero Tampering Detected).",
+                        count
+                    )
+                    .bold()
+                    .green()
+                );
+            }
+            (false, broken_idx) => {
+                eprintln!(
+                    "{} {}",
+                    "[TAMPERING DETECTED]".bold().red(),
+                    format!(
+                        "Audit ledger integrity failure at entry #{}! Hash chain is broken.",
+                        broken_idx
+                    )
+                    .bold()
+                    .red()
+                );
+            }
+        }
+        return Ok(());
+    }
+
     let entries = AuditLogger::read_recent(limit)?;
 
     if entries.is_empty() {

@@ -121,7 +121,7 @@ fn wrap_config(path: &Path) -> Result<()> {
 
     if wrapped_count > 0 {
         let updated_content = serde_json::to_string_pretty(&root)?;
-        fs::write(path, updated_content)?;
+        atomic_write_file(path, &updated_content)?;
         println!(
             "\n{} Successfully protected {} server(s) in {:?}",
             "[OK]".bold().green(),
@@ -133,5 +133,12 @@ fn wrap_config(path: &Path) -> Result<()> {
         println!("No changes needed in {:?}", path);
     }
 
+    Ok(())
+}
+
+fn atomic_write_file(path: &Path, content: &str) -> Result<()> {
+    let tmp_path = path.with_extension("tmp");
+    fs::write(&tmp_path, content).with_context(|| format!("Failed to write temporary file {:?}", tmp_path))?;
+    fs::rename(&tmp_path, path).with_context(|| format!("Failed to atomically rename {:?} to {:?}", tmp_path, path))?;
     Ok(())
 }

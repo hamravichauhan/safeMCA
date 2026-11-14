@@ -19,6 +19,7 @@ pub struct GuardPolicy {
     write_tool_regex: Regex,
     sql_comment_block_regex: Regex,
     sql_comment_line_regex: Regex,
+    sql_mysql_comment_regex: Regex,
 }
 
 impl Default for GuardPolicy {
@@ -37,12 +38,12 @@ impl GuardPolicy {
     pub fn with_config(config: ProjectConfig) -> Self {
         Self {
             project_config: config,
-            // Catches sensitive files, keys, tokens, and protected system paths
+            // Catches sensitive files, keys, tokens, dotfiles, and protected system paths
             sensitive_path_regex: Regex::new(
-                r#"(?i)(\.ssh|\.aws|\.gnupg|/etc/|/proc/|/sys/|/dev/|windows/system32|\.env($|[\.\w\-])|id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key|\.p12|\.pfx|\.kdbx|\.kube/config|docker/config\.json|\.azure|\.gcloud|\.netrc|\.npmrc|\.git-credentials|\.bash_history|\.zsh_history|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|bearer\s+[a-z0-9_\-\.]{20,}|credentials)"#
+                r#"(?i)(\.ssh|\.aws|\.gnupg|/etc/|/proc/|/sys/|/dev/|windows/system32|system32/config|ntuser\.dat|\.env($|[\.\w\-])|\.git/config|\.bashrc|\.zshrc|\.bash_profile|\.zprofile|id_rsa|id_ed25519|id_ecdsa|id_dsa|authorized_keys|known_hosts|\.pem|\.key|\.p12|\.pfx|\.kdbx|\.kube/config|docker/config\.json|\.azure|\.gcloud|google-credentials|\.netrc|\.npmrc|\.git-credentials|\.bash_history|\.zsh_history|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|bearer\s+[a-z0-9_\-\.]{20,}|credentials)"#
             ).unwrap(),
             
-            // Catches any directory traversal attempting to escape project root (e.g., ../, ..\, /..)
+            // Catches any directory traversal attempting to escape project root (e.g., ../, ..\, /.., ‥)
             // Prevents false positives on ellipsis (...) by requiring boundary or slash
             path_traversal_regex: Regex::new(r#"(\.\./|/\.\.|(^|/)\.\.$)"#).unwrap(),
 
@@ -69,6 +70,7 @@ impl GuardPolicy {
             // SQL comment normalizers to eliminate SQL comment evasion (e.g. DROP/**/TABLE)
             sql_comment_block_regex: Regex::new(r#"/\*[\s\S]*?\*/"#).unwrap(),
             sql_comment_line_regex: Regex::new(r#"--[^\r\n]*"#).unwrap(),
+            sql_mysql_comment_regex: Regex::new(r#"/\*![\s\S]*?\*/"#).unwrap(),
         }
     }
 
@@ -107,11 +109,21 @@ impl GuardPolicy {
         result
     }
 
-    /// Strips comments and collapses whitespace to normalize SQL queries against obfuscation
+    /// Normalizes Unicode homoglyphs and trick characters that could be used to bypass regex filters
+    fn normalize_unicode_tricks(s: &str) -> String {
+        s.replace(['／', '＼'], "/")
+            .replace('‥', "..")
+            .replace('．', ".")
+            .replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'], "") // Strip zero-width spaces
+    }
+
+    /// Strips comments, quotes, brackets, and collapses whitespace to normalize SQL queries against obfuscation
     fn normalize_sql(&self, input: &str) -> String {
-        let no_block = self.sql_comment_block_regex.replace_all(input, " ");
+        let no_mysql = self.sql_mysql_comment_regex.replace_all(input, " ");
+        let no_block = self.sql_comment_block_regex.replace_all(&no_mysql, " ");
         let no_comments = self.sql_comment_line_regex.replace_all(&no_block, " ");
-        no_comments.split_whitespace().collect::<Vec<_>>().join(" ")
+        let no_quotes = no_comments.replace(['`', '[', ']', '"'], " ");
+        no_quotes.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// Recursively extracts all unescaped string values from the JSON argument tree
@@ -140,8 +152,22 @@ impl GuardPolicy {
         // Also check the stringified payload as fallback
         extracted_strings.push(arguments.to_string());
 
-        for text in &extracted_strings {
-            let decoded = Self::decode_percent_recursive(text);
+        for raw_text in &extracted_strings {
+            // 0. Anti-Injection: Null byte detection
+            if raw_text.contains('\0') {
+                return PolicyDecision::Block {
+                    reason: "Null-byte injection attempt detected.".to_string(),
+                };
+            }
+
+            let text = Self::normalize_unicode_tricks(raw_text);
+            let decoded = Self::decode_percent_recursive(&text);
+
+            if decoded.contains('\0') {
+                return PolicyDecision::Block {
+                    reason: "Null-byte injection attempt detected after decoding.".to_string(),
+                };
+            }
 
             // Normalize slashes to forward slash and collapse multiple slashes
             let mut normalized_decoded = decoded.replace('\\', "/");
@@ -172,7 +198,7 @@ impl GuardPolicy {
 
             // 1.2 Custom SQL Policy
             if let Some(ref sql_policy) = self.project_config.sql_policy {
-                let normalized_sql = self.normalize_sql(text);
+                let normalized_sql = self.normalize_sql(&text);
                 let normalized_decoded_sql = self.normalize_sql(&decoded);
 
                 // Mode: read-only
@@ -223,7 +249,7 @@ impl GuardPolicy {
             // -------------------------------------------------------------
 
             // 2. Hard Block: Sensitive paths, credentials, or private keys
-            if self.sensitive_path_regex.is_match(text)
+            if self.sensitive_path_regex.is_match(&text)
                 || self.sensitive_path_regex.is_match(&decoded)
                 || self.sensitive_path_regex.is_match(&normalized_decoded)
             {
@@ -233,7 +259,7 @@ impl GuardPolicy {
             }
 
             // 3. Hard Block: Directory traversal (raw, decoded, or normalized)
-            if self.path_traversal_regex.is_match(text)
+            if self.path_traversal_regex.is_match(&text)
                 || self.path_traversal_regex.is_match(&decoded)
                 || self.path_traversal_regex.is_match(&normalized_decoded)
             {
@@ -243,7 +269,7 @@ impl GuardPolicy {
             }
 
             // 4. Destructive SQL detection (with SQL comment stripping to prevent evasion like DROP/**/TABLE)
-            let normalized_sql = self.normalize_sql(text);
+            let normalized_sql = self.normalize_sql(&text);
             let normalized_decoded_sql = self.normalize_sql(&decoded);
 
             if self.destructive_sql_regex.is_match(&normalized_sql)
@@ -255,7 +281,7 @@ impl GuardPolicy {
             }
 
             // 5. Destructive shell command detection
-            if self.destructive_cmd_regex.is_match(text)
+            if self.destructive_cmd_regex.is_match(&text)
                 || self.destructive_cmd_regex.is_match(&decoded)
                 || self.destructive_cmd_regex.is_match(&normalized_decoded)
             {

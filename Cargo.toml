@@ -1,6 +1,6 @@
 [package]
 name = "safemca"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Ravi Chauhan <hamravichauhan@gmail.com>"]
 description = "The sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)"
@@ -25,6 +25,8 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "5.0"
 anyhow = "1.0"
 async-trait = "0.1"
+sha2 = "0.10"
+hex = "0.4"
 
 [[bin]]
 name = "safemca"

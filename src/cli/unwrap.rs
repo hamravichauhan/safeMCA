@@ -33,7 +33,11 @@ fn unwrap_config(path: &Path) -> Result<()> {
     let backup_content = fs::read_to_string(&backup_path)
         .with_context(|| format!("Failed to read backup from {:?}", backup_path))?;
 
-    fs::write(path, backup_content).with_context(|| format!("Failed to restore config to {:?}", path))?;
+    let tmp_path = path.with_extension("tmp");
+    fs::write(&tmp_path, backup_content)
+        .with_context(|| format!("Failed to write temporary restore file {:?}", tmp_path))?;
+    fs::rename(&tmp_path, path)
+        .with_context(|| format!("Failed to restore config to {:?}", path))?;
     let _ = fs::remove_file(&backup_path);
 
     println!(

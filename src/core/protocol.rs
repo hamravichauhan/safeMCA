@@ -28,6 +28,11 @@ pub enum ParsedMessage {
 
 impl ParsedMessage {
     pub fn parse(line: &str) -> Self {
+        const MAX_MESSAGE_LEN: usize = 16 * 1024 * 1024;
+        if line.len() > MAX_MESSAGE_LEN {
+            return ParsedMessage::Invalid("Payload exceeds maximum permitted size limit of 16MB".to_string());
+        }
+
         let mut trimmed = line.trim();
         // Strip UTF-8 Byte Order Mark (BOM) if present to prevent parser bypass
         if let Some(stripped) = trimmed.strip_prefix('\u{FEFF}') {

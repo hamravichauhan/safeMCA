@@ -32,6 +32,12 @@ impl RollbackEngine {
 
         let _ = fs::create_dir_all(Self::state_dir());
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(Self::state_dir(), fs::Permissions::from_mode(0o700));
+        }
+
         // Record baseline untracked files
         if let Ok(untracked_out) = Command::new("git")
             .args(["ls-files", "--others", "--exclude-standard"])
@@ -116,6 +122,9 @@ impl RollbackEngine {
             {
                 let current_content = String::from_utf8_lossy(&current_out.stdout);
                 for current_file in current_content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+                    if current_file.starts_with(".mcp-guard") || current_file.starts_with(".safemca") {
+                        continue;
+                    }
                     if !baseline_files.contains(current_file) {
                         let path = Path::new(current_file);
                         if path.is_dir() {

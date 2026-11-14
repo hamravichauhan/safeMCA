@@ -1,6 +1,6 @@
 {
   "name": "safemca",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)",
   "main": "bin/safemca.js",
   "bin": {

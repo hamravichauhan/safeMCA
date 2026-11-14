@@ -189,6 +189,56 @@ fn test_audit_log_redaction() {
 }
 
 #[test]
+fn test_audit_trail_cryptographic_verification() {
+    let test_dir = std::env::temp_dir().join(format!("safemca_test_audit_{}", std::process::id()));
+    let test_log = test_dir.join("audit.jsonl");
+    let logger = AuditLogger::with_path(test_log.clone());
+
+    logger.log("crypto-test", "tool_a", &json!({"step": 1}), "ALLOWED", None);
+    logger.log("crypto-test", "tool_b", &json!({"step": 2}), "BLOCKED", Some("test block"));
+    logger.log("crypto-test", "tool_c", &json!({"step": 3}), "USER_APPROVED", None);
+
+    // 1. Verify legitimate chain
+    let (valid, count) = AuditLogger::verify_file(&test_log).expect("Integrity check failed");
+    assert!(valid, "Legitimate audit log failed integrity verification!");
+    assert_eq!(count, 3);
+
+    // 2. Tampering test: tamper with arguments in the file
+    let mut content = std::fs::read_to_string(&test_log).unwrap();
+    assert!(content.contains("\"step\":1"), "Expected unspaced JSON in log entry!");
+    content = content.replace("\"step\":1", "\"step\":999"); // Attacker tampered with arguments!
+    std::fs::write(&test_log, content).unwrap();
+
+    let (tampered_valid, _) = AuditLogger::verify_file(&test_log).expect("Check failed");
+    assert!(!tampered_valid, "Tampered audit log should have failed verification!");
+
+    let _ = std::fs::remove_dir_all(test_dir);
+}
+
+#[test]
+fn test_null_byte_and_unicode_homoglyphs() {
+    let policy = GuardPolicy::new();
+
+    // 1. Null-byte injection
+    assert!(matches!(
+        policy.evaluate("read_file", &json!({ "path": "secrets.txt\0.jpg" })),
+        PolicyDecision::Block { .. }
+    ));
+
+    // 2. Fullwidth slash homoglyph (／ U+FF0F)
+    assert!(matches!(
+        policy.evaluate("read_file", &json!({ "path": "..／etc/passwd" })),
+        PolicyDecision::Block { .. }
+    ));
+
+    // 3. Two-dot leader homoglyph (‥ U+2025)
+    assert!(matches!(
+        policy.evaluate("read_file", &json!({ "path": "‥/etc/passwd" })),
+        PolicyDecision::Block { .. }
+    ));
+}
+
+#[test]
 fn test_jsonrpc_batch_and_bom_parsing() {
     // UTF-8 BOM test
     let bom_line = "\u{FEFF}{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"read_file\", \"arguments\": {\"path\": \"src/main.rs\"}}}";

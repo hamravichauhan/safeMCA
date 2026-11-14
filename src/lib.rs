@@ -10,7 +10,7 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     name = "safemca",
-    version = "0.1.0",
+    version = "0.1.1",
     about = "The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)",
     long_about = "safeMCA is an ultra-fast, transparent security proxy for Claude Desktop, Cursor, and AI agents.\nIt blocks prompt injections, prevents credential leaks, provides interactive approvals, and enables 1-click git rollbacks."
 )]
@@ -57,6 +57,10 @@ pub enum Commands {
         /// Number of recent entries to show
         #[arg(short, long, default_value = "20")]
         tail: usize,
+
+        /// Verify the cryptographic SHA-256 hash-chain integrity of the audit ledger
+        #[arg(long)]
+        verify: bool,
     },
 
     /// Run self-test verification of policy checks and sandbox rules
@@ -82,8 +86,8 @@ pub async fn run_app() -> anyhow::Result<()> {
         Commands::Undo => {
             cli::undo::execute()?;
         }
-        Commands::Audit { tail } => {
-            cli::audit::execute(tail)?;
+        Commands::Audit { tail, verify } => {
+            cli::audit::execute(tail, verify)?;
         }
         Commands::Test => {
             run_self_test();

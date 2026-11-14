@@ -6,7 +6,7 @@ const fs = require("fs");
 const { spawnSync } = require("child_process");
 const https = require("https");
 
-const VERSION = "v0.1.0";
+const VERSION = "v0.1.1";
 const REPO = "hamravichauhan/safeMCA";
 
 function getBinaryName() {
