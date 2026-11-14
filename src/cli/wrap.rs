@@ -25,6 +25,12 @@ pub fn find_default_configs() -> Vec<PathBuf> {
         if cursor_global.exists() {
             configs.push(cursor_global);
         }
+
+        // 4. Google Antigravity / Gemini CLI MCP Config
+        let antigravity_mcp = home.join(".gemini/config/mcp_config.json");
+        if antigravity_mcp.exists() {
+            configs.push(antigravity_mcp);
+        }
     }
 
     // 4. Local workspace .cursor/mcp.json
