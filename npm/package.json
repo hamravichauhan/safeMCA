@@ -1,0 +1,30 @@
+{
+  "name": "safemca",
+  "version": "0.1.0",
+  "description": "Sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)",
+  "main": "bin/safemca.js",
+  "bin": {
+    "safemca": "bin/safemca.js",
+    "mcp-guard": "bin/safemca.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hamravichauhan/safeMCA.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "security",
+    "proxy",
+    "claude-desktop",
+    "cursor",
+    "antigravity"
+  ],
+  "author": "Ravi Chauhan <hamravichauhan@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hamravichauhan/safeMCA/issues"
+  },
+  "homepage": "https://github.com/hamravichauhan/safeMCA#readme"
+}
