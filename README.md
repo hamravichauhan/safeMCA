@@ -1,16 +1,16 @@
-# 🛡️ MCP-Guard
+# 🛡️ safeMCA (MCP-Guard)
 
 **The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)**
 
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
 
 ---
 
-## ⚡ What is MCP-Guard?
+## ⚡ What is safeMCA?
 
-**MCP-Guard** is an ultra-fast, sub-millisecond security proxy written in Rust that sits invisibly between your AI clients (**Claude Desktop, Cursor, Antigravity**) and your **MCP Servers** (Postgres, Filesystem, GitHub, Bash).
+**safeMCA** (also executable as `mcp-guard`) is an ultra-fast, sub-millisecond security proxy written in Rust that sits invisibly between your AI clients (**Claude Desktop, Cursor, Antigravity**) and your **MCP Servers** (Postgres, Filesystem, GitHub, Bash).
 
 Without MCP-Guard, AI models have **unrestricted "God-Mode" access** to execute commands, modify files, and query databases. A single prompt injection or hallucination can drop your tables or leak your private credentials.
 
