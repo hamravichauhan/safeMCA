@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.mcp-guard
+*.backup
+.DS_Store
