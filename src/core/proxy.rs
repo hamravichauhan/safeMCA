@@ -1,4 +1,6 @@
 use crate::core::protocol::ParsedMessage;
+use crate::guard::circuit_breaker::CircuitBreaker;
+use crate::guard::config::ProjectConfig;
 use crate::guard::hitl::HitlPrompter;
 use crate::guard::policy::{GuardPolicy, PolicyDecision};
 use crate::guard::rollback::RollbackEngine;
@@ -41,16 +43,19 @@ impl StdioProxy {
             .context("Failed to open child stdout pipe")?;
 
         let mut client_stdin_reader = BufReader::new(tokio::io::stdin()).lines();
-        let mut client_stdout = tokio::io::stdout();
-
         let mut server_stdout_reader = BufReader::new(child_stdout).lines();
 
         let server_name = self.server_name.clone();
-        let policy = GuardPolicy::new();
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let project_config = ProjectConfig::load_or_default(&current_dir);
+        let mut circuit_breaker = CircuitBreaker::new(project_config.circuit_breaker.as_ref());
+        let policy = GuardPolicy::with_config(project_config);
         let audit = AuditLogger::new(&server_name);
 
         // Loop 1: Client -> Server (Interception & Guard)
         let client_to_server = async move {
+            let mut client_stdout = tokio::io::stdout();
+
             while let Ok(Some(line)) = client_stdin_reader.next_line().await {
                 let parsed = ParsedMessage::parse(&line);
 
@@ -61,6 +66,31 @@ impl StdioProxy {
                         arguments,
                         ..
                     } => {
+                        // 1. Runaway Agent Circuit Breaker Check (Rate Limiter & Repetition Loop)
+                        if let Err(trip) = circuit_breaker.check_and_record(&tool_name, &arguments) {
+                            let trip_msg = trip.message();
+                            audit.log(&server_name, &tool_name, &arguments, "CIRCUIT_BREAKER_TRIPPED", Some(&trip_msg));
+
+                            let approved = HitlPrompter::prompt(&server_name, &tool_name, &trip_msg, &arguments);
+                            if !approved {
+                                audit.log(&server_name, &tool_name, &arguments, "USER_DENIED", Some(&trip_msg));
+                                if !id.is_null() {
+                                    let err_resp = ParsedMessage::make_error_response(
+                                        &id,
+                                        -32000,
+                                        &format!("Blocked by safeMCA: {}", trip_msg),
+                                    );
+                                    if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
+                                        break;
+                                    }
+                                    let _ = client_stdout.flush().await;
+                                }
+                                continue;
+                            }
+                            circuit_breaker.reset_consecutive();
+                        }
+
+                        // 2. Policy Evaluation (Deterministic Sandbox, Custom Policies & HITL)
                         let decision = policy.evaluate(&tool_name, &arguments);
 
                         match decision {
@@ -134,6 +164,13 @@ impl StdioProxy {
                                 if first_id.is_none() {
                                     first_id = Some(id.clone());
                                 }
+
+                                // Circuit breaker check on batch item
+                                if let Err(trip) = circuit_breaker.check_and_record(tool_name, arguments) {
+                                    blocked_reason = Some((id.clone(), tool_name.clone(), arguments.clone(), trip.message()));
+                                    break;
+                                }
+
                                 match policy.evaluate(tool_name, arguments) {
                                     PolicyDecision::Block { reason } => {
                                         blocked_reason = Some((id.clone(), tool_name.clone(), arguments.clone(), reason));

@@ -1,3 +1,4 @@
+use crate::guard::config::ProjectConfig;
 use regex::Regex;
 use serde_json::Value;
 
@@ -9,9 +10,11 @@ pub enum PolicyDecision {
 }
 
 pub struct GuardPolicy {
+    project_config: ProjectConfig,
     sensitive_path_regex: Regex,
     path_traversal_regex: Regex,
     destructive_sql_regex: Regex,
+    mutation_sql_regex: Regex,
     destructive_cmd_regex: Regex,
     write_tool_regex: Regex,
     sql_comment_block_regex: Regex,
@@ -26,7 +29,14 @@ impl Default for GuardPolicy {
 
 impl GuardPolicy {
     pub fn new() -> Self {
+        let dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let config = ProjectConfig::load_or_default(&dir);
+        Self::with_config(config)
+    }
+
+    pub fn with_config(config: ProjectConfig) -> Self {
         Self {
+            project_config: config,
             // Catches sensitive files, keys, tokens, and protected system paths
             sensitive_path_regex: Regex::new(
                 r#"(?i)(\.ssh|\.aws|\.gnupg|/etc/|/proc/|/sys/|/dev/|windows/system32|\.env($|[\.\w\-])|id_rsa|id_ed25519|id_ecdsa|id_dsa|\.pem|\.key|\.p12|\.pfx|\.kdbx|\.kube/config|docker/config\.json|\.azure|\.gcloud|\.netrc|\.npmrc|\.git-credentials|\.bash_history|\.zsh_history|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|bearer\s+[a-z0-9_\-\.]{20,}|credentials)"#
@@ -39,6 +49,11 @@ impl GuardPolicy {
             // Catches mutating or destructive SQL statements (DROP, TRUNCATE, DELETE FROM, ALTER, UPDATE, INSERT, CREATE)
             destructive_sql_regex: Regex::new(
                 r#"(?i)\b(DROP\s+(TABLE|DATABASE|SCHEMA|VIEW|INDEX)|TRUNCATE(\s+TABLE)?|DELETE\s+FROM|ALTER\s+TABLE|UPDATE\s+\w+\s+SET|INSERT\s+INTO|CREATE\s+(TABLE|DATABASE))\b"#
+            ).unwrap(),
+
+            // General mutation SQL regex used for read-only enforcement
+            mutation_sql_regex: Regex::new(
+                r#"(?i)\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|DROP\s+|TRUNCATE|ALTER\s+TABLE|CREATE\s+)\b"#
             ).unwrap(),
 
             // Catches dangerous shell commands (rm with recursive flags, disk wipes, curl/wget pipes to shell)
@@ -134,7 +149,80 @@ impl GuardPolicy {
                 normalized_decoded = normalized_decoded.replace("//", "/");
             }
 
-            // 1. Hard Block: Sensitive paths, credentials, or private keys
+            // -------------------------------------------------------------
+            // Feature 1: Project-Level Policy Config (.safemca.yml) Checks
+            // -------------------------------------------------------------
+
+            // 1.1 Custom Blocked Paths
+            for blocked in &self.project_config.blocked_paths {
+                let clean_blocked = blocked.trim().trim_end_matches("/*").trim_end_matches("/**");
+                if !clean_blocked.is_empty()
+                    && (text.contains(clean_blocked)
+                        || decoded.contains(clean_blocked)
+                        || normalized_decoded.contains(clean_blocked))
+                {
+                    return PolicyDecision::Block {
+                        reason: format!(
+                            "Access to path blocked by project policy (.safemca.yml): '{}'",
+                            blocked
+                        ),
+                    };
+                }
+            }
+
+            // 1.2 Custom SQL Policy
+            if let Some(ref sql_policy) = self.project_config.sql_policy {
+                let normalized_sql = self.normalize_sql(text);
+                let normalized_decoded_sql = self.normalize_sql(&decoded);
+
+                // Mode: read-only
+                if sql_policy.mode.as_deref() == Some("read-only")
+                    && (self.mutation_sql_regex.is_match(&normalized_sql)
+                        || self.mutation_sql_regex.is_match(&normalized_decoded_sql))
+                {
+                    return PolicyDecision::Block {
+                        reason: "Database mutation blocked: project policy (.safemca.yml) enforces read-only mode."
+                            .to_string(),
+                    };
+                }
+
+                // Forbidden tables
+                for table in &sql_policy.block_tables {
+                    if normalized_sql.to_lowercase().contains(&table.to_lowercase())
+                        || normalized_decoded_sql.to_lowercase().contains(&table.to_lowercase())
+                    {
+                        return PolicyDecision::Block {
+                            reason: format!(
+                                "Access to table '{}' is restricted by project policy (.safemca.yml)",
+                                table
+                            ),
+                        };
+                    }
+                }
+            }
+
+            // 1.3 Custom Shell Policy
+            if let Some(ref shell_policy) = self.project_config.shell_policy {
+                for blocked_cmd in &shell_policy.block {
+                    let clean_cmd = blocked_cmd.trim().trim_end_matches(" *").trim_end_matches("/*");
+                    if !clean_cmd.is_empty()
+                        && (text.contains(clean_cmd) || decoded.contains(clean_cmd))
+                    {
+                        return PolicyDecision::Block {
+                            reason: format!(
+                                "Shell command blocked by project policy (.safemca.yml): '{}'",
+                                blocked_cmd
+                            ),
+                        };
+                    }
+                }
+            }
+
+            // -------------------------------------------------------------
+            // Standard Deterministic Sandboxing Rules
+            // -------------------------------------------------------------
+
+            // 2. Hard Block: Sensitive paths, credentials, or private keys
             if self.sensitive_path_regex.is_match(text)
                 || self.sensitive_path_regex.is_match(&decoded)
                 || self.sensitive_path_regex.is_match(&normalized_decoded)
@@ -144,7 +232,7 @@ impl GuardPolicy {
                 };
             }
 
-            // 2. Hard Block: Directory traversal (raw, decoded, or normalized)
+            // 3. Hard Block: Directory traversal (raw, decoded, or normalized)
             if self.path_traversal_regex.is_match(text)
                 || self.path_traversal_regex.is_match(&decoded)
                 || self.path_traversal_regex.is_match(&normalized_decoded)
@@ -154,7 +242,7 @@ impl GuardPolicy {
                 };
             }
 
-            // 3. Destructive SQL detection (with SQL comment stripping to prevent evasion like DROP/**/TABLE)
+            // 4. Destructive SQL detection (with SQL comment stripping to prevent evasion like DROP/**/TABLE)
             let normalized_sql = self.normalize_sql(text);
             let normalized_decoded_sql = self.normalize_sql(&decoded);
 
@@ -166,7 +254,7 @@ impl GuardPolicy {
                 };
             }
 
-            // 4. Destructive shell command detection
+            // 5. Destructive shell command detection
             if self.destructive_cmd_regex.is_match(text)
                 || self.destructive_cmd_regex.is_match(&decoded)
                 || self.destructive_cmd_regex.is_match(&normalized_decoded)
@@ -177,14 +265,14 @@ impl GuardPolicy {
             }
         }
 
-        // 5. Any write / mutation tool -> Require Human Confirmation (The Airbag)
+        // 6. Any write / mutation tool -> Require Human Confirmation (The Airbag)
         if self.write_tool_regex.is_match(tool_name) {
             return PolicyDecision::RequireApproval {
                 reason: format!("State-changing action requested by tool '{}'", tool_name),
             };
         }
 
-        // 6. Default safe read-only tools
+        // 7. Default safe read-only tools
         PolicyDecision::Allow
     }
 }
