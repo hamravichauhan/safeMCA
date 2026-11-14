@@ -101,12 +101,13 @@ Output:
 
 | Command | Description |
 | :--- | :--- |
-| `mcp-guard wrap` | Automatically wraps Claude Desktop / Cursor servers |
-| `mcp-guard unwrap` | Restores original unwrapped configuration |
-| `mcp-guard run --server <name> -- <cmd> [args]` | Runs a target MCP server through the security proxy |
-| `mcp-guard undo` | Reverts file changes made during the last agent session |
-| `mcp-guard audit [--tail 20]` | Displays recent security audit logs |
-| `mcp-guard test` | Runs self-check verifying that attacks are blocked |
+| `safemca wrap` | Automatically wraps Claude Desktop / Cursor servers |
+| `safemca unwrap` | Restores original unwrapped configuration |
+| `safemca run --server <name> -- <cmd> [args]` | Runs a target MCP server through the security proxy |
+| `safemca snapshot` | Captures baseline workspace state before running agents |
+| `safemca undo` | Reverts all file changes and purges rogue files/dirs created by agents |
+| `safemca audit [--tail 20]` | Displays recent security audit logs (with redacted credentials) |
+| `safemca test` | Runs self-check verifying that all attacks are blocked |
 
 ---
 

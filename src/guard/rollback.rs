@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct RollbackEngine;
@@ -100,7 +100,7 @@ impl RollbackEngine {
             }
         };
 
-        // 2. Remove any rogue untracked files created by the agent
+        // 2. Remove any rogue untracked files or directories created by the agent
         let untracked_record = Self::untracked_file();
         if untracked_record.exists() {
             let baseline_content = fs::read_to_string(&untracked_record).unwrap_or_default();
@@ -117,8 +117,26 @@ impl RollbackEngine {
                 let current_content = String::from_utf8_lossy(&current_out.stdout);
                 for current_file in current_content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
                     if !baseline_files.contains(current_file) {
-                        println!("  {} Removed rogue file created by agent: {}", "🗑️".yellow(), current_file.red());
-                        let _ = fs::remove_file(current_file);
+                        let path = Path::new(current_file);
+                        if path.is_dir() {
+                            println!("  {} Removed rogue directory: {}", "🗑️".yellow(), current_file.red());
+                            let _ = fs::remove_dir_all(path);
+                        } else if path.exists() {
+                            println!("  {} Removed rogue file created by agent: {}", "🗑️".yellow(), current_file.red());
+                            let _ = fs::remove_file(path);
+
+                            // Recursively clean up empty parent directories left by rogue agent files
+                            let mut curr = path.parent();
+                            while let Some(parent) = curr {
+                                if parent == Path::new("") || parent == Path::new(".") {
+                                    break;
+                                }
+                                if fs::remove_dir(parent).is_err() {
+                                    break; // Stop when directory is not empty
+                                }
+                                curr = parent.parent();
+                            }
+                        }
                     }
                 }
             }

@@ -29,12 +29,51 @@ impl AuditLogger {
         Self { log_path }
     }
 
+    /// Redacts tokens, passwords, and private keys from audit logs to prevent credential leakage
+    fn sanitize_value(val: &Value) -> Value {
+        match val {
+            Value::String(s) => {
+                if s.contains("ghp_")
+                    || s.contains("sk-")
+                    || s.contains("BEGIN PRIVATE KEY")
+                    || s.to_lowercase().contains("bearer ")
+                {
+                    Value::String("[REDACTED_BY_SAFEMCA]".to_string())
+                } else {
+                    Value::String(s.clone())
+                }
+            }
+            Value::Object(map) => {
+                let mut new_map = serde_json::Map::new();
+                for (k, v) in map {
+                    let lower_k = k.to_lowercase();
+                    if lower_k.contains("password")
+                        || lower_k.contains("token")
+                        || lower_k.contains("secret")
+                        || lower_k.contains("credential")
+                        || lower_k.contains("api_key")
+                        || lower_k.contains("apikey")
+                    {
+                        new_map.insert(k.clone(), Value::String("[REDACTED_BY_SAFEMCA]".to_string()));
+                    } else {
+                        new_map.insert(k.clone(), Self::sanitize_value(v));
+                    }
+                }
+                Value::Object(new_map)
+            }
+            Value::Array(arr) => Value::Array(arr.iter().map(Self::sanitize_value).collect()),
+            other => other.clone(),
+        }
+    }
+
     pub fn log(&self, server: &str, tool: &str, arguments: &Value, status: &str, reason: Option<&str>) {
+        let sanitized_args = Self::sanitize_value(arguments);
+
         let entry = AuditEntry {
             timestamp: Utc::now().to_rfc3339(),
             server: server.to_string(),
             tool: tool.to_string(),
-            arguments: arguments.clone(),
+            arguments: sanitized_args,
             status: status.to_string(),
             reason: reason.map(|s| s.to_string()),
         };

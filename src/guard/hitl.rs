@@ -22,7 +22,7 @@ impl HitlPrompter {
         eprintln!(
             "{}",
             format!(
-                "[MCP-Guard] Denied tool call '{}' (no interactive terminal or GUI available).",
+                "[safeMCA] Denied tool call '{}' (no interactive terminal or GUI available).",
                 tool
             )
             .red()
@@ -46,7 +46,7 @@ impl HitlPrompter {
 
         let banner = format!(
             "\n{}\n{} {}\n{}   {}\n{} {}\n{}  {}\n{}\n{} [y/N]: ",
-            "🛡️  [MCP-Guard Security Intercept] -----------------------------".bold().yellow(),
+            "🛡️  [safeMCA Security Intercept] ------------------------------".bold().yellow(),
             "Server:   ".bold(),
             server.cyan(),
             "Tool:     ".bold(),
@@ -74,22 +74,28 @@ impl HitlPrompter {
         false
     }
 
+    fn escape_applescript(s: &str) -> String {
+        s.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace(['\r', '\n'], " ")
+    }
+
     fn prompt_macos_dialog(server: &str, tool: &str, reason: &str, arguments: &Value) -> bool {
         let args_str = serde_json::to_string(arguments).unwrap_or_else(|_| "".to_string());
-        let preview = if args_str.len() > 100 {
-            format!("{}...", &args_str[..100])
+        let preview = if args_str.len() > 120 {
+            format!("{}...", &args_str[..120])
         } else {
             args_str
         };
 
-        // Escape double quotes for AppleScript
-        let safe_tool = tool.replace('"', "\\\"");
-        let safe_reason = reason.replace('"', "\\\"");
-        let safe_preview = preview.replace('"', "\\\"");
+        let safe_server = Self::escape_applescript(server);
+        let safe_tool = Self::escape_applescript(tool);
+        let safe_reason = Self::escape_applescript(reason);
+        let safe_preview = Self::escape_applescript(&preview);
 
         let script = format!(
-            r#"button returned of (display dialog "🛡️ MCP-Guard Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
-            server, safe_tool, safe_reason, safe_preview
+            r#"button returned of (display dialog "🛡️ safeMCA Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
+            safe_server, safe_tool, safe_reason, safe_preview
         );
 
         if let Ok(output) = Command::new("osascript").arg("-e").arg(&script).output() {

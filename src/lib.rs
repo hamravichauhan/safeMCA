@@ -46,6 +46,9 @@ pub enum Commands {
         config: Option<PathBuf>,
     },
 
+    /// Take an explicit snapshot of the workspace before running an agent
+    Snapshot,
+
     /// 1-Click Rollback: Revert file changes made by the AI agent
     Undo,
 
@@ -72,6 +75,9 @@ pub async fn run_app() -> anyhow::Result<()> {
         }
         Commands::Unwrap { config } => {
             cli::unwrap::execute(config)?;
+        }
+        Commands::Snapshot => {
+            cli::snapshot::execute()?;
         }
         Commands::Undo => {
             cli::undo::execute()?;
