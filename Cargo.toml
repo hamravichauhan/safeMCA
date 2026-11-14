@@ -2,9 +2,15 @@
 name = "safemca"
 version = "0.1.0"
 edition = "2021"
-authors = ["safeMCA Team"]
-description = "The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)"
+authors = ["Ravi Chauhan <hamravichauhan@gmail.com>"]
+description = "The sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)"
 license = "MIT"
+repository = "https://github.com/hamravichauhan/safeMCA"
+homepage = "https://github.com/hamravichauhan/safeMCA"
+documentation = "https://docs.rs/safemca"
+readme = "README.md"
+keywords = ["mcp", "security", "ai-agents", "proxy", "airbag"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 tokio = { version = "1.38", features = ["full"] }
