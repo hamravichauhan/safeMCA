@@ -19,12 +19,19 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_name: safemca-linux-x86_64.tar.gz
+            is_windows: false
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact_name: safemca-macos-arm64.tar.gz
+            is_windows: false
           - target: x86_64-apple-darwin
             os: macos-13
             artifact_name: safemca-macos-x86_64.tar.gz
+            is_windows: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: safemca-windows-x86_64.tar.gz
+            is_windows: true
 
     steps:
       - uses: actions/checkout@v4
@@ -37,11 +44,22 @@ jobs:
       - name: Build Release Binaries
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package Artifacts
+      - name: Package Artifacts (Unix)
+        if: matrix.is_windows != true
         run: |
           mkdir -p staging
           cp target/${{ matrix.target }}/release/safemca staging/
           cp target/${{ matrix.target }}/release/mcp-guard staging/
+          cp README.md LICENSE staging/
+          tar -czvf ${{ matrix.artifact_name }} -C staging .
+
+      - name: Package Artifacts (Windows)
+        if: matrix.is_windows == true
+        shell: bash
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target }}/release/safemca.exe staging/
+          cp target/${{ matrix.target }}/release/mcp-guard.exe staging/
           cp README.md LICENSE staging/
           tar -czvf ${{ matrix.artifact_name }} -C staging .
 
