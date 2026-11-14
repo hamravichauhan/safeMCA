@@ -2,6 +2,7 @@
 
 **The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)**
 
+[![Crates.io](https://img.shields.io/crates/v/safemca.svg)](https://crates.io/crates/safemca)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
