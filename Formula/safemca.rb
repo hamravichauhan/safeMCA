@@ -23,5 +23,6 @@ class Safemca < Formula
 
   test do
     assert_match "safemca", shell_output("#{bin}/safemca --version")
+    system "#{bin}/safemca", "test"
   end
 end

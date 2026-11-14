@@ -5,6 +5,7 @@
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
+[![safeMCA Protected](https://img.shields.io/badge/MCP-safeMCA_Protected-blue)](https://github.com/hamravichauhan/safeMCA)
 
 ---
 
@@ -17,9 +18,11 @@ Without safeMCA, AI models have **unrestricted "God-Mode" access** to execute co
 safeMCA provides:
 1. **The Airbag (Human-in-the-Loop):** Prompts you before destructive actions run (e.g. `DROP TABLE`, `rm -rf`, file deletions).
 2. **Deterministic Sandboxing:** Physically blocks AI agents from touching `~/.ssh`, `~/.aws`, `.env`, or escaping your project directory.
-3. **1-Click Rollback:** Automatically captures shadow snapshots so you can undo agent-made file changes with `safemca undo`.
-4. **10-Second Auto-Wrap:** Automatically finds and wraps your Claude Desktop or Cursor configuration with one command.
-5. **Tamper-Proof Audit Trail:** High-speed append-only logs of every tool call and blocked attack.
+3. **Runaway Agent Circuit Breaker:** Stops infinite loops and rate limit runaway (3 identical calls or >30 calls/min).
+4. **Project-Level Policies (`.safemca.yml`):** Commit security policies into git to enforce team-wide path, shell, and SQL boundaries.
+5. **1-Click Rollback:** Automatically captures shadow snapshots so you can undo agent-made file changes with `safemca undo`.
+6. **10-Second Auto-Wrap:** Automatically finds and wraps your Claude Desktop or Cursor configuration with one command.
+7. **Tamper-Proof Audit Trail:** High-speed append-only logs of every tool call and blocked attack with automated secret redaction.
 
 ---
 
@@ -113,6 +116,56 @@ Output:
 [UNDO] Restoring workspace to snapshot a8b7c3...
 [OK] Successfully rolled back all file changes made by the AI agent!
 ```
+
+---
+
+## Enterprise & Team Security: `.safemca.yml`
+
+Teams can commit a `.safemca.yml` file into their project root to enforce deterministic policies across all developers and AI agents:
+
+```yaml
+version: "1.0"
+
+# Paths that agents are prohibited from reading or modifying
+blocked_paths:
+  - "infra/secrets/**"
+  - "deploy/credentials.pem"
+  - "billing/**"
+
+# Database policy
+sql_policy:
+  mode: "read-only" # Hard blocks INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE
+  block_tables:
+    - "users"
+    - "payroll"
+
+# Terminal and execution command boundaries
+shell_policy:
+  allow:
+    - "cargo test"
+    - "npm test"
+    - "git status"
+  block:
+    - "curl"
+    - "wget"
+    - "rm"
+    - "git push"
+
+# Circuit breaker thresholds
+circuit_breaker:
+  max_calls_per_minute: 30
+  max_identical_consecutive_calls: 3
+```
+
+---
+
+## Runaway Agent Circuit Breaker
+
+Autonomous coding agents can get trapped in hallucination loops, hammering tools hundreds of times and wasting API tokens or modifying databases.
+
+safeMCA includes a built-in circuit breaker:
+1. **Repetition Loop Breaker:** If an agent calls the exact same tool with the exact same arguments 3 times consecutively, safeMCA trips the breaker and requires human confirmation before continuing.
+2. **Rate Limiting:** Protects against runaway scripts by limiting tool invocations to 30 calls per minute by default (configurable via `.safemca.yml`).
 
 ---
 
