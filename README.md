@@ -27,15 +27,34 @@ safeMCA provides:
 
 ### 1. Installation
 
-```bash
-# Build from source
-cargo build --release
+Choose whichever method fits your setup:
 
-# Move binary to your PATH
+**Option A: Zero Install with NPX (macOS, Windows, Linux)**
+```bash
+npx safemca wrap
+```
+
+**Option B: Cargo Install (Rust)**
+```bash
+cargo install safemca
+```
+
+**Option C: Pre-Built Standalone Binaries**
+Download the single binary for your operating system from [GitHub Releases](https://github.com/hamravichauhan/safeMCA/releases/tag/v0.1.0):
+* macOS Apple Silicon (`safemca-macos-arm64.tar.gz`)
+* macOS Intel (`safemca-macos-x86_64.tar.gz`)
+* Windows x64 (`safemca-windows-x86_64.tar.gz` with `safemca.exe`)
+* Linux x64 (`safemca-linux-x86_64.tar.gz`)
+
+**Option D: Build from Source**
+```bash
+git clone https://github.com/hamravichauhan/safeMCA.git
+cd safeMCA
+cargo build --release
 cp target/release/safemca /usr/local/bin/
 ```
 
-### 2. Protect Claude Desktop or Cursor in 10 Seconds
+### 2. Protect Claude Desktop, Cursor, or Antigravity in 10 Seconds
 
 ```bash
 safemca wrap
