@@ -81,7 +81,7 @@ impl RollbackEngine {
             return Ok(());
         }
 
-        println!("{} Restoring workspace to snapshot {}...", "⏪".cyan(), sha.yellow());
+        println!("{} Restoring workspace to snapshot {}...", "[UNDO]".cyan(), sha.yellow());
 
         // 1. Restore tracked working tree from snapshot commit
         let status = Command::new("git")
@@ -119,10 +119,10 @@ impl RollbackEngine {
                     if !baseline_files.contains(current_file) {
                         let path = Path::new(current_file);
                         if path.is_dir() {
-                            println!("  {} Removed rogue directory: {}", "🗑️".yellow(), current_file.red());
+                            println!("  {} Removed rogue directory: {}", "[REMOVED]".yellow(), current_file.red());
                             let _ = fs::remove_dir_all(path);
                         } else if path.exists() {
-                            println!("  {} Removed rogue file created by agent: {}", "🗑️".yellow(), current_file.red());
+                            println!("  {} Removed rogue file created by agent: {}", "[REMOVED]".yellow(), current_file.red());
                             let _ = fs::remove_file(path);
 
                             // Recursively clean up empty parent directories left by rogue agent files
@@ -146,7 +146,7 @@ impl RollbackEngine {
         if restored_tracked {
             println!(
                 "{} {}",
-                "✓".bold().green(),
+                "[OK]".bold().green(),
                 "Successfully rolled back all file changes made by the AI agent!".bold().green()
             );
             let _ = fs::remove_file(snap_file);

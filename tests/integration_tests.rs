@@ -1,3 +1,4 @@
+use safemca::core::protocol::ParsedMessage;
 use safemca::guard::policy::{GuardPolicy, PolicyDecision};
 use safemca::storage::audit::AuditLogger;
 use serde_json::json;
@@ -183,4 +184,22 @@ fn test_audit_log_redaction() {
     assert!(!args_str.contains("supersecretpassword"));
     assert!(args_str.contains("[REDACTED_BY_SAFEMCA]"));
     assert!(args_str.contains("normal_value"));
+}
+
+#[test]
+fn test_jsonrpc_batch_and_bom_parsing() {
+    // UTF-8 BOM test
+    let bom_line = "\u{FEFF}{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"read_file\", \"arguments\": {\"path\": \"src/main.rs\"}}}";
+    let parsed = ParsedMessage::parse(bom_line);
+    assert!(matches!(parsed, ParsedMessage::ToolCall { .. }));
+
+    // JSON-RPC Batch Array test
+    let batch_line = "[{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/call\", \"params\": {\"name\": \"read_file\", \"arguments\": {\"path\": \"~/.ssh/id_rsa\"}}}]";
+    let parsed_batch = ParsedMessage::parse(batch_line);
+    if let ParsedMessage::Batch(items) = parsed_batch {
+        assert_eq!(items.len(), 1);
+        assert!(matches!(items[0], ParsedMessage::ToolCall { .. }));
+    } else {
+        panic!("Expected ParsedMessage::Batch");
+    }
 }

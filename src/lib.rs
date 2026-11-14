@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[command(
     name = "safemca",
     version = "0.1.0",
-    about = "🛡️  The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)",
+    about = "The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)",
     long_about = "safeMCA is an ultra-fast, transparent security proxy for Claude Desktop, Cursor, and AI agents.\nIt blocks prompt injections, prevents credential leaks, provides interactive approvals, and enables 1-click git rollbacks."
 )]
 pub struct Cli {
@@ -94,7 +94,7 @@ pub async fn run_app() -> anyhow::Result<()> {
 }
 
 pub fn run_self_test() {
-    println!("\n{}", "🛡️  Running safeMCA Security & Sandbox Test Suite (10 Checks)...".bold().cyan());
+    println!("\n{}", "Running safeMCA Security & Sandbox Test Suite (10 Checks)...".bold().cyan());
     println!("{}", "=========================================================================".dimmed());
 
     let policy = guard::policy::GuardPolicy::new();
@@ -106,19 +106,19 @@ pub fn run_self_test() {
         let decision = policy.evaluate(tool, &payload);
         match (expected, decision) {
             ("BLOCK", guard::policy::PolicyDecision::Block { reason }) => {
-                println!("{} Test {:02}: {} -> {}", "✓".green().bold(), test_num, name, reason.red().bold());
+                println!("{} Test {:02}: {} -> {}", "[PASS]".green().bold(), test_num, name, reason.red().bold());
                 passed += 1;
             }
             ("APPROVE", guard::policy::PolicyDecision::RequireApproval { reason }) => {
-                println!("{} Test {:02}: {} -> {}", "✓".green().bold(), test_num, name, reason.yellow().bold());
+                println!("{} Test {:02}: {} -> {}", "[PASS]".green().bold(), test_num, name, reason.yellow().bold());
                 passed += 1;
             }
             ("ALLOW", guard::policy::PolicyDecision::Allow) => {
-                println!("{} Test {:02}: {} -> {}", "✓".green().bold(), test_num, name, "ALLOWED".green().bold());
+                println!("{} Test {:02}: {} -> {}", "[PASS]".green().bold(), test_num, name, "ALLOWED".green().bold());
                 passed += 1;
             }
             (exp, other) => {
-                println!("{} Test {:02}: {} FAILED (Expected {}, got {:?})", "✗".red().bold(), test_num, name, exp, other);
+                println!("{} Test {:02}: {} FAILED (Expected {}, got {:?})", "[FAIL]".red().bold(), test_num, name, exp, other);
             }
         }
     };
@@ -155,8 +155,8 @@ pub fn run_self_test() {
 
     println!("{}", "=========================================================================".dimmed());
     if passed == total {
-        println!("{} All {}/{} security & functionality test cases PASSED flawlessly!\n", "✓".bold().green(), passed, total);
+        println!("{} All {}/{} security & functionality test cases PASSED flawlessly!\n", "[OK]".bold().green(), passed, total);
     } else {
-        println!("{} {}/{} test cases failed.\n", "✗".bold().red(), total - passed, total);
+        println!("{} {}/{} test cases failed.\n", "[FAIL]".bold().red(), total - passed, total);
     }
 }

@@ -26,7 +26,7 @@ pub fn execute(custom_config: Option<PathBuf>) -> Result<()> {
 fn unwrap_config(path: &Path) -> Result<()> {
     let backup_path = path.with_extension("json.backup");
     if !backup_path.exists() {
-        println!("{} No backup found for {:?}", "⚠".yellow(), path);
+        println!("{} No backup found for {:?}", "[WARN]".yellow(), path);
         return Ok(());
     }
 
@@ -38,7 +38,7 @@ fn unwrap_config(path: &Path) -> Result<()> {
 
     println!(
         "{} Restored original configuration for {:?}",
-        "✓".bold().green(),
+        "[OK]".bold().green(),
         path
     );
 

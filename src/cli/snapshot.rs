@@ -7,7 +7,7 @@ pub fn execute() -> Result<()> {
         Some(sha) => {
             println!(
                 "{} Workspace snapshot captured ({})!\nYou can revert all changes anytime with '{}'.",
-                "✓".bold().green(),
+                "[OK]".bold().green(),
                 sha.yellow(),
                 "safemca undo".cyan()
             );

@@ -46,7 +46,7 @@ impl HitlPrompter {
 
         let banner = format!(
             "\n{}\n{} {}\n{}   {}\n{} {}\n{}  {}\n{}\n{} [y/N]: ",
-            "🛡️  [safeMCA Security Intercept] ------------------------------".bold().yellow(),
+            "[safeMCA Security Intercept] ----------------------------------".bold().yellow(),
             "Server:   ".bold(),
             server.cyan(),
             "Tool:     ".bold(),
@@ -94,7 +94,7 @@ impl HitlPrompter {
         let safe_preview = Self::escape_applescript(&preview);
 
         let script = format!(
-            r#"button returned of (display dialog "🛡️ safeMCA Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
+            r#"button returned of (display dialog "safeMCA Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
             safe_server, safe_tool, safe_reason, safe_preview
         );
 

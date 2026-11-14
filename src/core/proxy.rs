@@ -67,12 +67,11 @@ impl StdioProxy {
                             PolicyDecision::Block { reason } => {
                                 audit.log(&server_name, &tool_name, &arguments, "BLOCKED", Some(&reason));
 
-                                // Only reply if this was a request with an id (JSON-RPC spec: do not reply to notifications)
                                 if !id.is_null() {
                                     let err_resp = ParsedMessage::make_error_response(
                                         &id,
                                         -32000,
-                                        &format!("Blocked by MCP-Guard: {}", reason),
+                                        &format!("Blocked by safeMCA: {}", reason),
                                     );
                                     if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                         break;
@@ -101,7 +100,7 @@ impl StdioProxy {
                                         let err_resp = ParsedMessage::make_error_response(
                                             &id,
                                             -32000,
-                                            "Blocked by MCP-Guard: Denied by user.",
+                                            "Blocked by safeMCA: Denied by user.",
                                         );
                                         if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                             break;
@@ -121,6 +120,78 @@ impl StdioProxy {
                                 }
                                 let _ = child_stdin.flush().await;
                             }
+                        }
+                    }
+
+                    ParsedMessage::Batch(items) => {
+                        // Inspect all messages in the batch
+                        let mut blocked_reason = None;
+                        let mut require_approval_item = None;
+                        let mut first_id = None;
+
+                        for item in &items {
+                            if let ParsedMessage::ToolCall { id, tool_name, arguments, .. } = item {
+                                if first_id.is_none() {
+                                    first_id = Some(id.clone());
+                                }
+                                match policy.evaluate(tool_name, arguments) {
+                                    PolicyDecision::Block { reason } => {
+                                        blocked_reason = Some((id.clone(), tool_name.clone(), arguments.clone(), reason));
+                                        break;
+                                    }
+                                    PolicyDecision::RequireApproval { reason } => {
+                                        if require_approval_item.is_none() {
+                                            require_approval_item = Some((id.clone(), tool_name.clone(), arguments.clone(), reason));
+                                        }
+                                    }
+                                    PolicyDecision::Allow => {}
+                                }
+                            }
+                        }
+
+                        if let Some((id, tool_name, args, reason)) = blocked_reason {
+                            audit.log(&server_name, &tool_name, &args, "BLOCKED", Some(&reason));
+                            let err_resp = ParsedMessage::make_error_response(
+                                &id,
+                                -32000,
+                                &format!("Blocked by safeMCA: Batch call contained blocked tool '{}': {}", tool_name, reason),
+                            );
+                            if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
+                                break;
+                            }
+                            let _ = client_stdout.flush().await;
+                        } else if let Some((id, tool_name, args, reason)) = require_approval_item {
+                            let approved = HitlPrompter::prompt(&server_name, &tool_name, &reason, &args);
+                            if approved {
+                                audit.log(&server_name, &tool_name, &args, "USER_APPROVED", Some(&reason));
+                                let _ = RollbackEngine::take_snapshot();
+
+                                let mut line_nl = line;
+                                line_nl.push('\n');
+                                if child_stdin.write_all(line_nl.as_bytes()).await.is_err() {
+                                    break;
+                                }
+                                let _ = child_stdin.flush().await;
+                            } else {
+                                audit.log(&server_name, &tool_name, &args, "USER_DENIED", Some(&reason));
+                                let err_resp = ParsedMessage::make_error_response(
+                                    &id,
+                                    -32000,
+                                    "Blocked by safeMCA: Denied by user.",
+                                );
+                                if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
+                                    break;
+                                }
+                                let _ = client_stdout.flush().await;
+                            }
+                        } else {
+                            // All items in batch allowed
+                            let mut line_nl = line;
+                            line_nl.push('\n');
+                            if child_stdin.write_all(line_nl.as_bytes()).await.is_err() {
+                                break;
+                            }
+                            let _ = child_stdin.flush().await;
                         }
                     }
 

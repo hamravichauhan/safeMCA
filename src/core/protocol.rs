@@ -21,13 +21,19 @@ pub enum ParsedMessage {
         arguments: Value,
         raw_json: Value,
     },
+    Batch(Vec<ParsedMessage>),
     Other(Value),
     Invalid(String),
 }
 
 impl ParsedMessage {
     pub fn parse(line: &str) -> Self {
-        let trimmed = line.trim();
+        let mut trimmed = line.trim();
+        // Strip UTF-8 Byte Order Mark (BOM) if present to prevent parser bypass
+        if let Some(stripped) = trimmed.strip_prefix('\u{FEFF}') {
+            trimmed = stripped;
+        }
+
         if trimmed.is_empty() {
             return ParsedMessage::Invalid(line.to_string());
         }
@@ -36,6 +42,19 @@ impl ParsedMessage {
             Ok(v) => v,
             Err(_) => return ParsedMessage::Invalid(line.to_string()),
         };
+
+        Self::from_value(val)
+    }
+
+    pub fn from_value(val: Value) -> Self {
+        // Handle JSON-RPC 2.0 Batch Arrays
+        if let Some(arr) = val.as_array() {
+            if arr.is_empty() {
+                return ParsedMessage::Other(val);
+            }
+            let messages: Vec<ParsedMessage> = arr.iter().cloned().map(Self::from_value).collect();
+            return ParsedMessage::Batch(messages);
+        }
 
         if let (Some(method), Some(params)) = (val.get("method").and_then(|m| m.as_str()), val.get("params")) {
             if method == "tools/call" {
@@ -69,5 +88,22 @@ impl ParsedMessage {
             }
         });
         format!("{}\n", response)
+    }
+
+    pub fn make_batch_error_response(errors: &[(&Value, i64, &str)]) -> String {
+        let responses: Vec<Value> = errors
+            .iter()
+            .map(|(id, code, msg)| {
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": code,
+                        "message": msg
+                    }
+                })
+            })
+            .collect();
+        format!("{}\n", Value::Array(responses))
     }
 }

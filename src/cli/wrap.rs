@@ -58,12 +58,16 @@ pub fn execute(custom_config: Option<PathBuf>) -> Result<()> {
 
 fn wrap_config(path: &Path) -> Result<()> {
     let content = fs::read_to_string(path).with_context(|| format!("Failed to read {:?}", path))?;
-    let mut root: Value = serde_json::from_str(&content).with_context(|| format!("Invalid JSON in {:?}", path))?;
+    let mut root: Value = if content.trim().is_empty() {
+        serde_json::json!({ "mcpServers": {} })
+    } else {
+        serde_json::from_str(&content).with_context(|| format!("Invalid JSON in {:?}", path))?
+    };
 
     let mcp_servers = match root.get_mut("mcpServers").and_then(|s| s.as_object_mut()) {
         Some(s) => s,
         None => {
-            println!("{} No 'mcpServers' object found in {:?}", "⚠".yellow(), path);
+            println!("{} No 'mcpServers' object found in {:?}", "[WARN]".yellow(), path);
             return Ok(());
         }
     };
@@ -72,7 +76,7 @@ fn wrap_config(path: &Path) -> Result<()> {
     let backup_path = path.with_extension("json.backup");
     if !backup_path.exists() {
         fs::write(&backup_path, &content).with_context(|| format!("Failed to create backup at {:?}", backup_path))?;
-        println!("{} Created backup at {:?}", "✓".green(), backup_path);
+        println!("{} Created backup at {:?}", "[OK]".green(), backup_path);
     }
 
     let mut wrapped_count = 0;
@@ -104,7 +108,7 @@ fn wrap_config(path: &Path) -> Result<()> {
             server_obj.insert("command".to_string(), Value::String("mcp-guard".to_string()));
             server_obj.insert("args".to_string(), serde_json::to_value(new_args)?);
 
-            println!("  {} Protected server: '{}'", "🛡️".green(), server_name.bold().green());
+            println!("  {} Protected server: '{}'", "[PROTECTED]".green(), server_name.bold().green());
             wrapped_count += 1;
         }
     }
@@ -114,7 +118,7 @@ fn wrap_config(path: &Path) -> Result<()> {
         fs::write(path, updated_content)?;
         println!(
             "\n{} Successfully protected {} server(s) in {:?}",
-            "✓".bold().green(),
+            "[OK]".bold().green(),
             wrapped_count,
             path
         );

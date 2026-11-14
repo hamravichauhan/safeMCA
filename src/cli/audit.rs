@@ -10,7 +10,7 @@ pub fn execute(limit: usize) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{}", "🛡️  MCP-Guard Security Audit Trail".bold().cyan());
+    println!("\n{}", "safeMCA Security Audit Trail".bold().cyan());
     println!("{}", "=========================================================================================".dimmed());
     println!(
         "{:<20} {:<15} {:<20} {:<15} {}",
