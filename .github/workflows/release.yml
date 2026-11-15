@@ -50,6 +50,7 @@ jobs:
           mkdir -p staging
           cp target/${{ matrix.target }}/release/safemcp staging/
           cp target/${{ matrix.target }}/release/mcp-guard staging/
+          cp target/${{ matrix.target }}/release/safemca staging/
           cp README.md LICENSE staging/
           tar -czvf ${{ matrix.artifact_name }} -C staging .
 
@@ -60,6 +61,7 @@ jobs:
           mkdir -p staging
           cp target/${{ matrix.target }}/release/safemcp.exe staging/
           cp target/${{ matrix.target }}/release/mcp-guard.exe staging/
+          cp target/${{ matrix.target }}/release/safemca.exe staging/
           cp README.md LICENSE staging/
           tar -czvf ${{ matrix.artifact_name }} -C staging .
 
@@ -67,5 +69,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.artifact_name }}
+          name: "safeMCP ${{ github.ref_name }}"
+          generate_release_notes: true
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

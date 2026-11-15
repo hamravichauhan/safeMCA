@@ -78,13 +78,19 @@ async function ensureBinary() {
   }
 
   const assetName = getAssetFilename();
-  const downloadUrl = `https://github.com/${REPO}/releases/download/${VERSION}/${assetName}`;
+  const primaryUrl = `https://github.com/hamravichauhan/safeMCP/releases/download/${VERSION}/${assetName}`;
+  const fallbackUrl = `https://github.com/hamravichauhan/safeMCA/releases/download/${VERSION}/${assetName}`;
   const archivePath = path.join(cacheDir, `${VERSION}-${assetName}`);
 
   process.stderr.write(`[safeMCP] Downloading standalone binary for ${os.platform()}-${os.arch()}...\n`);
 
   try {
-    await downloadFile(downloadUrl, archivePath);
+    try {
+      await downloadFile(primaryUrl, archivePath);
+    } catch (_primaryErr) {
+      // Fallback if repository hasn't been renamed in GitHub settings yet
+      await downloadFile(fallbackUrl, archivePath);
+    }
 
     // Extract archive using system tar
     spawnSync("tar", ["-xzf", archivePath, "-C", cacheDir], { stdio: "inherit" });
@@ -95,7 +101,9 @@ async function ensureBinary() {
       if (extractedBinary !== binaryPath) {
         fs.renameSync(extractedBinary, binaryPath);
       }
-      fs.chmodSync(binaryPath, 0o755);
+      try {
+        fs.chmodSync(binaryPath, 0o755);
+      } catch (_) {}
     }
 
     // Cleanup archive

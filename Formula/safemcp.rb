@@ -19,6 +19,7 @@ class Safemcp < Formula
   def install
     bin.install "safemcp"
     bin.install "mcp-guard"
+    bin.install "safemca" if File.exist?("safemca")
   end
 
   test do

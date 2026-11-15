@@ -6,7 +6,8 @@
   "bin": {
     "safemcp": "bin/safemcp.js",
     "safe-mcp": "bin/safemcp.js",
-    "mcp-guard": "bin/safemcp.js"
+    "mcp-guard": "bin/safemcp.js",
+    "safemca": "bin/safemcp.js"
   },
   "repository": {
     "type": "git",

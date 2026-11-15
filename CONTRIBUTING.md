@@ -1,6 +1,6 @@
-# Contributing to safeMCA (MCP-Guard)
+# Contributing to safeMCP (MCP-Guard)
 
-First off, thank you for considering contributing to **safeMCA**! We welcome contributions from developers, security researchers, and AI builders.
+First off, thank you for considering contributing to **safeMCP**! We welcome contributions from developers, security researchers, and AI builders.
 
 ---
 
@@ -13,8 +13,8 @@ First off, thank you for considering contributing to **safeMCA**! We welcome con
 ### Building Locally
 
 ```bash
-git clone https://github.com/hamravichauhan/safeMCA.git
-cd safeMCA
+git clone https://github.com/hamravichauhan/safeMCP.git
+cd safeMCP
 
 # Build in debug mode
 cargo build
@@ -58,4 +58,5 @@ If you discover a security vulnerability or bypass in the policy engine, please 
 ---
 
 ## License
-By contributing to safeMCA, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
+By contributing to safeMCP, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).
+
