@@ -19,32 +19,33 @@ impl SecretVault {
         Ok(resolved)
     }
 
-    /// Resolves template strings like `{{safemca:keychain/service}}` or `{{safemca:env/VAR}}`
+    /// Resolves template strings like `{{safemcp:keychain/service}}` or `{{safemcp:env/VAR}}`
     pub fn resolve_template(input: &str) -> Result<String> {
-        let start_tag = "{{safemca:";
-        let end_tag = "}}";
-
-        if !input.contains(start_tag) {
-            return Ok(input.to_string());
-        }
-
         let mut result = input.to_string();
-        let mut iterations = 0;
-        const MAX_ITERATIONS: usize = 32;
+        for start_tag in ["{{safemcp:", "{{safemca:"] {
+            let end_tag = "}}";
 
-        while let Some(start_idx) = result.find(start_tag) {
-            iterations += 1;
-            if iterations > MAX_ITERATIONS {
-                anyhow::bail!("Exceeded maximum recursion depth (32) resolving secret templates");
+            if !result.contains(start_tag) {
+                continue;
             }
-            let after_start = &result[start_idx + start_tag.len()..];
-            if let Some(end_offset) = after_start.find(end_tag) {
-                let token_content = after_start[..end_offset].trim();
-                let secret_value = Self::fetch_secret(token_content)?;
-                let full_placeholder = &result[start_idx..start_idx + start_tag.len() + end_offset + end_tag.len()];
-                result = result.replace(full_placeholder, &secret_value);
-            } else {
-                break;
+
+            let mut iterations = 0;
+            const MAX_ITERATIONS: usize = 32;
+
+            while let Some(start_idx) = result.find(start_tag) {
+                iterations += 1;
+                if iterations > MAX_ITERATIONS {
+                    anyhow::bail!("Exceeded maximum recursion depth (32) resolving secret templates");
+                }
+                let after_start = &result[start_idx + start_tag.len()..];
+                if let Some(end_offset) = after_start.find(end_tag) {
+                    let token_content = after_start[..end_offset].trim();
+                    let secret_value = Self::fetch_secret(token_content)?;
+                    let full_placeholder = &result[start_idx..start_idx + start_tag.len() + end_offset + end_tag.len()];
+                    result = result.replace(full_placeholder, &secret_value);
+                } else {
+                    break;
+                }
             }
         }
 
@@ -111,7 +112,7 @@ impl SecretVault {
         {
             // Windows Credential Manager lookup via powershell
             let script = format!(
-                "[System.Net.NetworkCredential]::new('', (Get-ItemProperty 'HKCU:\\Software\\safeMCA\\Secrets' -ErrorAction SilentlyContinue).{}).Password",
+                "[System.Net.NetworkCredential]::new('', (Get-ItemProperty 'HKCU:\\Software\\safeMCP\\Secrets' -ErrorAction SilentlyContinue).{}).Password",
                 target
             );
             let output = Command::new("powershell")
@@ -137,7 +138,7 @@ impl SecretVault {
 
     fn fetch_from_file_vault(target: &str) -> Result<String> {
         let home = dirs::home_dir().context("Could not locate home directory")?;
-        let vault_dir = home.join(".safemca").join("vault");
+        let vault_dir = home.join(".safemcp").join("vault");
         let secret_file = vault_dir.join(target);
 
         if secret_file.exists() {
@@ -146,13 +147,20 @@ impl SecretVault {
             return Ok(secret.trim().to_string());
         }
 
+        let fallback_file = home.join(".safemca").join("vault").join(target);
+        if fallback_file.exists() {
+            let secret = fs::read_to_string(&fallback_file)
+                .with_context(|| format!("Failed to read secret file {:?}", fallback_file))?;
+            return Ok(secret.trim().to_string());
+        }
+
         anyhow::bail!("Secret '{}' not found in vault file {:?}", target, secret_file)
     }
 
-    /// Stores a secret into local safeMCA vault (~/.safemca/vault/<target>) with 0600 permissions
+    /// Stores a secret into local safeMCP vault (~/.safemcp/vault/<target>) with 0600 permissions
     pub fn store_in_file_vault(target: &str, secret_value: &str) -> Result<PathBuf> {
         let home = dirs::home_dir().context("Could not locate home directory")?;
-        let vault_dir = home.join(".safemca").join("vault");
+        let vault_dir = home.join(".safemcp").join("vault");
         if !vault_dir.exists() {
             fs::create_dir_all(&vault_dir)?;
             #[cfg(unix)]

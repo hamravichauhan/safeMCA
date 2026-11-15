@@ -1,4 +1,4 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    safemca::run_app().await
+    safemcp::run_app().await
 }

@@ -9,10 +9,10 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "safemca",
-    version = "0.2.0",
+    name = "safemcp",
+    version = "0.1.0",
     about = "The Airbag & Security Shield for AI Agents using the Model Context Protocol (MCP)",
-    long_about = "safeMCA is an ultra-fast, transparent security proxy for Claude Desktop, Cursor, and AI agents.\nIt blocks prompt injections, prevents credential leaks, provides interactive approvals, and enables 1-click git rollbacks."
+    long_about = "safeMCP is an ultra-fast, transparent security proxy for Claude Desktop, Cursor, and AI agents.\nIt blocks prompt injections, prevents credential leaks, provides interactive approvals, and enables 1-click git rollbacks."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -21,7 +21,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Run an MCP server protected by safeMCA
+    /// Run an MCP server protected by safeMCP
     Run {
         /// Name or identifier for the target MCP server
         #[arg(short, long, default_value = "default")]
@@ -104,7 +104,7 @@ pub async fn run_app() -> anyhow::Result<()> {
 }
 
 pub fn run_self_test() {
-    println!("\n{}", "Running safeMCA Security, Sandbox & Airbag Test Suite...".bold().cyan());
+    println!("\n{}", "Running safeMCP Security, Sandbox & Airbag Test Suite...".bold().cyan());
     println!("{}", "=========================================================================".dimmed());
 
     let policy = guard::policy::GuardPolicy::new();

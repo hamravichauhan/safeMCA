@@ -92,7 +92,7 @@ impl StdioProxy {
                                     let err_resp = ParsedMessage::make_error_response(
                                         &id,
                                         -32000,
-                                        &format!("Blocked by safeMCA: {}", trip_msg),
+                                        &format!("Blocked by safeMCP: {}", trip_msg),
                                     );
                                     if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                         break;
@@ -115,7 +115,7 @@ impl StdioProxy {
                                     let err_resp = ParsedMessage::make_error_response(
                                         &id,
                                         -32000,
-                                        &format!("Blocked by safeMCA: {}", reason),
+                                        &format!("Blocked by safeMCP: {}", reason),
                                     );
                                     if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                         break;
@@ -144,7 +144,7 @@ impl StdioProxy {
                                         let err_resp = ParsedMessage::make_error_response(
                                             &id,
                                             -32000,
-                                            "Blocked by safeMCA: Denied by user.",
+                                            "Blocked by safeMCP: Denied by user.",
                                         );
                                         if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                             break;
@@ -200,7 +200,7 @@ impl StdioProxy {
                             let err_resp = ParsedMessage::make_error_response(
                                 &id,
                                 -32000,
-                                &format!("Blocked by safeMCA: Batch call contained blocked tool '{}': {}", tool_name, reason),
+                                &format!("Blocked by safeMCP: Batch call contained blocked tool '{}': {}", tool_name, reason),
                             );
                             if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                 break;
@@ -223,7 +223,7 @@ impl StdioProxy {
                                 let err_resp = ParsedMessage::make_error_response(
                                     &id,
                                     -32000,
-                                    "Blocked by safeMCA: Denied by user.",
+                                    "Blocked by safeMCP: Denied by user.",
                                 );
                                 if client_stdout.write_all(err_resp.as_bytes()).await.is_err() {
                                     break;
@@ -271,7 +271,7 @@ impl StdioProxy {
                         // Divert to stderr so client's JSON-RPC pipe does NOT crash.
                         let mut err_out = tokio::io::stderr();
                         let warning = format!(
-                            "[safeMCA Sanitizer] Non-JSON stdout from child '{}' diverted to stderr to prevent connection crash: {}\n",
+                            "[safeMCP Sanitizer] Non-JSON stdout from child '{}' diverted to stderr to prevent connection crash: {}\n",
                             server_name_out, trimmed
                         );
                         let _ = err_out.write_all(warning.as_bytes()).await;
@@ -331,7 +331,7 @@ impl StdioProxy {
                             let err_resp = ParsedMessage::make_error_response(
                                 &msg_id,
                                 -32000,
-                                &format!("Blocked by safeMCA: {}", reason),
+                                &format!("Blocked by safeMCP: {}", reason),
                             );
                             if out.write_all(err_resp.as_bytes()).await.is_err() {
                                 break;
@@ -384,7 +384,9 @@ impl StdioProxy {
                                         }
                                     ],
                                     "isError": false,
+                                    "_safemcp_cached": true,
                                     "_safemca_cached": true,
+                                    "_safemcp_cache_file": cache_path.to_string_lossy(),
                                     "_safemca_cache_file": cache_path.to_string_lossy()
                                 });
                             }

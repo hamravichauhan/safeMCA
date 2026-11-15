@@ -41,7 +41,7 @@ pub fn execute(limit: usize, verify: bool) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n{}", "safeMCA Security Audit Trail".bold().cyan());
+    println!("\n{}", "safeMCP Security Audit Trail".bold().cyan());
     println!("{}", "=========================================================================================".dimmed());
     println!(
         "{:<20} {:<15} {:<20} {:<15} {}",

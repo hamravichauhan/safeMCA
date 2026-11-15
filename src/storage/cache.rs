@@ -18,7 +18,7 @@ impl Default for ResponseCache {
 
 impl ResponseCache {
     pub fn new() -> Self {
-        let dir = PathBuf::from(".safemca").join("cache");
+        let dir = PathBuf::from(".safemcp").join("cache");
         Self::with_dir(dir)
     }
 
@@ -70,7 +70,7 @@ impl ResponseCache {
         let size_kb = (byte_len as f64) / 1024.0;
 
         let summary = format!(
-            "[safeMCA Airbag] Tool '{}' output was truncated ({:.1} KB, {} lines) to protect LLM context.\n\
+            "[safeMCP Airbag] Tool '{}' output was truncated ({:.1} KB, {} lines) to protect LLM context.\n\
              Full output is cached at: {}\n\n\
              --- Truncated Preview (First {} lines) ---\n\
              {}\n\

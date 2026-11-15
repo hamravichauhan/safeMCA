@@ -274,7 +274,7 @@ impl GuardPolicy {
             }
 
             // -------------------------------------------------------------
-            // 1. Project-level policy overrides (.safemca.yml)
+            // 1. Project-level policy overrides (.safemcp.yml)
             // -------------------------------------------------------------
 
             // 1.1 Custom Blocked Paths
@@ -287,7 +287,7 @@ impl GuardPolicy {
                 {
                     return PolicyDecision::Block {
                         reason: format!(
-                            "Access to path blocked by project policy (.safemca.yml): '{}'",
+                            "Access to path blocked by project policy (.safemcp.yml): '{}'",
                             blocked_glob
                         ),
                     };
@@ -305,7 +305,7 @@ impl GuardPolicy {
                         || self.mutation_sql_regex.is_match(&normalized_decoded_sql))
                 {
                     return PolicyDecision::Block {
-                        reason: "Database mutation blocked: project policy (.safemca.yml) enforces read-only mode."
+                        reason: "Database mutation blocked: project policy (.safemcp.yml) enforces read-only mode."
                             .to_string(),
                     };
                 }
@@ -317,7 +317,7 @@ impl GuardPolicy {
                     {
                         return PolicyDecision::Block {
                             reason: format!(
-                                "Access to table '{}' is restricted by project policy (.safemca.yml)",
+                                "Access to table '{}' is restricted by project policy (.safemcp.yml)",
                                 table
                             ),
                         };
@@ -334,7 +334,7 @@ impl GuardPolicy {
                     {
                         return PolicyDecision::Block {
                             reason: format!(
-                                "Shell command blocked by project policy (.safemca.yml): '{}'",
+                                "Shell command blocked by project policy (.safemcp.yml): '{}'",
                                 blocked_cmd
                             ),
                         };

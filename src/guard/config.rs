@@ -72,6 +72,8 @@ pub struct ToolRouterConfig {
 impl ProjectConfig {
     pub fn find_and_load(dir: &Path) -> Result<Option<Self>> {
         let candidates = [
+            dir.join(".safemcp.yml"),
+            dir.join(".safemcp.yaml"),
             dir.join(".safemca.yml"),
             dir.join(".safemca.yaml"),
             dir.join(".mcp-guard.yml"),

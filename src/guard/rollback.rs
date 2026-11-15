@@ -122,7 +122,10 @@ impl RollbackEngine {
             {
                 let current_content = String::from_utf8_lossy(&current_out.stdout);
                 for current_file in current_content.lines().map(|l| l.trim()).filter(|l| !l.is_empty()) {
-                    if current_file.starts_with(".mcp-guard") || current_file.starts_with(".safemca") {
+                    if current_file.starts_with(".mcp-guard")
+                        || current_file.starts_with(".safemcp")
+                        || current_file.starts_with(".safemca")
+                    {
                         continue;
                     }
                     if !baseline_files.contains(current_file) {

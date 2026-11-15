@@ -6,7 +6,7 @@ pub fn execute() -> anyhow::Result<()> {
     let current_dir = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let stats = TelemetryCollector::compute_stats(&current_dir);
 
-    println!("\n{}", "safeMCA Live Runtime Inspector & Telemetry".bold().cyan());
+    println!("\n{}", "safeMCP Live Runtime Inspector & Telemetry".bold().cyan());
     println!("{}", "========================================================================".dimmed());
 
     let servers_display = if stats.active_servers.is_empty() {

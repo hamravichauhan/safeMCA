@@ -9,7 +9,7 @@ pub fn execute() -> Result<()> {
                 "{} Workspace snapshot captured ({})!\nYou can revert all changes anytime with '{}'.",
                 "[OK]".bold().green(),
                 sha.yellow(),
-                "safemca undo".cyan()
+                "safemcp undo".cyan()
             );
         }
         None => {

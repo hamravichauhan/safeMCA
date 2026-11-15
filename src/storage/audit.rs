@@ -50,10 +50,10 @@ impl AuditLogger {
     /// security correlation without ever exposing plaintext secrets in logs.
     fn hash_secret(secret: &str) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(b"safemca_audit_salt_v1:");
+        hasher.update(b"safemcp_audit_salt_v1:");
         hasher.update(secret.as_bytes());
         let full_hash = hex::encode(hasher.finalize());
-        format!("[REDACTED_BY_SAFEMCA][HASH:{}]", &full_hash[..16])
+        format!("[REDACTED_BY_SAFEMCP][HASH:{}]", &full_hash[..16])
     }
 
     /// Redacts tokens, passwords, and private keys from audit logs to prevent credential leakage
@@ -83,7 +83,7 @@ impl AuditLogger {
                     {
                         let secret_val = match v {
                             Value::String(s) => Self::hash_secret(s),
-                            _ => "[REDACTED_BY_SAFEMCA]".to_string(),
+                            _ => "[REDACTED_BY_SAFEMCP]".to_string(),
                         };
                         new_map.insert(k.clone(), Value::String(secret_val));
                     } else {

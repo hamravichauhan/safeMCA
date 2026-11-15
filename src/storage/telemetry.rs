@@ -68,15 +68,20 @@ impl TelemetryCollector {
         }
 
         // Count cached items and calculate estimated bytes saved
-        let cache_dir = workspace_dir.join(".safemca").join("cache");
-        if cache_dir.exists() {
-            if let Ok(entries) = fs::read_dir(cache_dir) {
-                for entry in entries.flatten() {
-                    if let Ok(meta) = entry.metadata() {
-                        let len = meta.len() as usize;
-                        if len > 32768 {
-                            stats.airbag_truncations += 1;
-                            stats.bytes_saved_airbag += len.saturating_sub(4096);
+        let cache_candidates = [
+            workspace_dir.join(".safemcp").join("cache"),
+            workspace_dir.join(".safemca").join("cache"),
+        ];
+        for cache_dir in &cache_candidates {
+            if cache_dir.exists() {
+                if let Ok(entries) = fs::read_dir(cache_dir) {
+                    for entry in entries.flatten() {
+                        if let Ok(meta) = entry.metadata() {
+                            let len = meta.len() as usize;
+                            if len > 32768 {
+                                stats.airbag_truncations += 1;
+                                stats.bytes_saved_airbag += len.saturating_sub(4096);
+                            }
                         }
                     }
                 }

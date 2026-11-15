@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mock MCP Server for Testing safeMCA
+Mock MCP Server for Testing safeMCP
 Implements standard MCP JSON-RPC 2.0 over Stdio with support for
 simulating edge cases (stray prints, giant payloads, prompt injections).
 """

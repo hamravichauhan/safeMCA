@@ -33,7 +33,7 @@ impl HitlPrompter {
             eprintln!(
                 "{}",
                 format!(
-                    "[safeMCA] Denied tool call '{}' (no interactive terminal or GUI available).",
+                    "[safeMCP] Denied tool call '{}' (no interactive terminal or GUI available).",
                     tool
                 )
                 .red()
@@ -54,7 +54,7 @@ impl HitlPrompter {
 
         let banner = format!(
             "\n{}\n{} {}\n{}   {}\n{} {}\n{}  {}\n{}\n{} [y/N]: ",
-            "[safeMCA Security Intercept] ----------------------------------".bold().yellow(),
+            "[safeMCP Security Intercept] ----------------------------------".bold().yellow(),
             "Server:   ".bold(),
             server.cyan(),
             "Tool:     ".bold(),
@@ -99,7 +99,7 @@ impl HitlPrompter {
         let safe_preview = Self::escape_applescript(&preview);
 
         let script = format!(
-            r#"button returned of (display dialog "safeMCA Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
+            r#"button returned of (display dialog "safeMCP Alert\n\nServer: {}\nTool: {}\nReason: {}\n\nArguments:\n{}\n\nDo you want to allow this action?" buttons {{"Deny", "Allow"}} default button "Deny" with icon caution giving up after 30)"#,
             safe_server, safe_tool, safe_reason, safe_preview
         );
 
@@ -119,7 +119,7 @@ impl HitlPrompter {
         let preview = crate::guard::safe_truncate(&args_str, 120);
 
         let message = format!(
-            "safeMCA Alert`n`nServer: {}`nTool: {}`nReason: {}`n`nArguments:`n{}`n`nDo you want to allow this action?",
+            "safeMCP Alert`n`nServer: {}`nTool: {}`nReason: {}`n`nArguments:`n{}`n`nDo you want to allow this action?",
             server.replace('\'', "''"),
             tool.replace('\'', "''"),
             reason.replace('\'', "''"),
@@ -127,7 +127,7 @@ impl HitlPrompter {
         );
 
         let ps_cmd = format!(
-            "Add-Type -AssemblyName System.Windows.Forms; $res = [System.Windows.Forms.MessageBox]::Show('{}', 'safeMCA Security Alert', [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning); if ($res -eq [System.Windows.Forms.DialogResult]::Yes) {{ exit 0 }} else {{ exit 1 }}",
+            "Add-Type -AssemblyName System.Windows.Forms; $res = [System.Windows.Forms.MessageBox]::Show('{}', 'safeMCP Security Alert', [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Warning); if ($res -eq [System.Windows.Forms.DialogResult]::Yes) {{ exit 0 }} else {{ exit 1 }}",
             message
         );
 

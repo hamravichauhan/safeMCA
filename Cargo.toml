@@ -1,14 +1,14 @@
 [package]
-name = "safemca"
-version = "0.2.0"
-default-run = "safemca"
+name = "safemcp"
+version = "0.1.0"
+default-run = "safemcp"
 edition = "2021"
 authors = ["Ravi Chauhan <hamravichauhan@gmail.com>"]
 description = "The sub-millisecond security proxy and airbag for AI agents using the Model Context Protocol (MCP)"
 license = "MIT"
-repository = "https://github.com/hamravichauhan/safeMCA"
-homepage = "https://github.com/hamravichauhan/safeMCA"
-documentation = "https://docs.rs/safemca"
+repository = "https://github.com/hamravichauhan/safeMCP"
+homepage = "https://github.com/hamravichauhan/safeMCP"
+documentation = "https://docs.rs/safemcp"
 readme = "README.md"
 keywords = ["mcp", "security", "ai-agents", "proxy", "airbag"]
 categories = ["command-line-utilities", "development-tools"]
@@ -30,9 +30,13 @@ sha2 = "0.10"
 hex = "0.4"
 
 [[bin]]
-name = "safemca"
+name = "safemcp"
 path = "src/main.rs"
 
 [[bin]]
 name = "mcp-guard"
 path = "src/bin/mcp-guard.rs"
+
+[[bin]]
+name = "safemca"
+path = "src/bin/safemca.rs"
